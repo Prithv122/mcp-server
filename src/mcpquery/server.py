@@ -10,6 +10,9 @@ overrides ``call_tool``:
 * **Validation errors quote the input.** Pydantic's message includes ``input_value=...``,
   so a payload in a typed argument came straight back in the error text. Errors here carry
   field names only (see :mod:`mcpquery.errors`).
+
+``read_resource`` is overridden for the same reason: an unknown URI comes back from the SDK
+as ``Unknown resource: <uri>`` with the URI again in the error data.
 """
 
 from __future__ import annotations
@@ -19,8 +22,9 @@ import logging
 from typing import Any
 
 from mcp.server.mcpserver import Context, MCPServer
-from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from mcp.server.mcpserver.exceptions import ResourceError, ToolError
+from mcp.shared.exceptions import MCPError
+from mcp.types import INVALID_PARAMS, CallToolResult, TextContent, ToolAnnotations
 from pydantic import ValidationError
 
 from . import __version__, errors
@@ -82,6 +86,18 @@ class GuardedServer(MCPServer):
                 )
             log.exception("tool %s failed unexpectedly", name)
             return error_result(errors.internal())
+
+    async def read_resource(self, uri: Any, context: Context | None = None) -> Any:
+        try:
+            return await super().read_resource(uri, context)
+        except ResourceError as exc:
+            known = sorted(str(r.uri) for r in await self.list_resources())
+            templates = sorted(t.uri_template for t in await self.list_resource_templates())
+            error = errors.bad_param(
+                f"Unknown resource. Resources: {known}; templates: {templates}."
+            )
+            # An MCPError passes through the SDK's handler unchanged, without the URI in `data`.
+            raise MCPError(code=INVALID_PARAMS, message=error.to_json()) from exc
 
 
 def _root_cause(exc: BaseException) -> BaseException:

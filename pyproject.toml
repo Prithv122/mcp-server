@@ -5,7 +5,7 @@ description = "A Model Context Protocol server that exposes an allowlisted, read
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "duckdb>=1.5",
+    "duckdb==1.5.5",
     "mcp>=2.3",
     "pandas>=2.2",
     "pyarrow>=18.0",

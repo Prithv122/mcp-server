@@ -15,9 +15,11 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import duckdb
 import pytest
+from mcp.shared.exceptions import MCPError
 
 from mcpquery import attacks, minitpch
 from mcpquery.attacks import (
@@ -28,11 +30,15 @@ from mcpquery.attacks import (
     build_row,
     classify,
     diff_fingerprints,
+    direct_verdict,
     echo_hits,
     fingerprint,
+    interrupt_after,
     load_suite,
+    mcp_verdict,
     render_markdown,
     run_suite,
+    sql_fragments,
     summarise,
 )
 
@@ -41,6 +47,10 @@ SUITE = ROOT / "attacks" / "attacks.jsonl"
 
 FILE_READS = {"fs-01", "fs-02", "fs-03"}
 COERCED_LIMITS = {"lm-04", "lm-05"}
+# An open server finding, kept in the suite but out of the shared in-process run: DuckDB's
+# list() aggregate does not check for interrupts while it builds, so the time limit fires
+# at 2 s and the call still returns only after minutes (about 150 s for 2e8 elements).
+UNINTERRUPTIBLE = {"ex-04"}
 
 
 def payload(**overrides) -> Payload:
@@ -208,6 +218,162 @@ def test_resource_and_prompt_rejections_need_no_code():
     assert summarise([row], [])["rejections"] == 0
 
 
+# -- the blind spots found in review ---------------------------------------------------
+
+
+class _FakeClient:
+    """Just enough of an MCP client for ``mcp_verdict``."""
+
+    def __init__(self, result=None, error=None):
+        self.result, self.error = result, error
+
+    async def call_tool(self, name, args):
+        if self.error:
+            raise self.error
+        return self.result
+
+    async def read_resource(self, uri):
+        if self.error:
+            raise self.error
+
+    async def get_prompt(self, name, args):
+        if self.error:
+            raise self.error
+
+
+def _tool_result(structured, is_error=False):
+    return SimpleNamespace(is_error=is_error, structured_content=structured, content=[])
+
+
+def test_a_client_failure_is_an_error_outcome_not_a_rejection():
+    for exc in (TimeoutError("slow"), ConnectionError("pipe closed"), RuntimeError("anyio")):
+        out = asyncio.run(mcp_verdict(_FakeClient(error=exc), payload()))
+        assert out.verdict == "error"
+    row = build_row(
+        payload(expect="reject"), Outcome("reject"), Outcome("error", text="TimeoutError"), "m"
+    )
+    assert row.divergence == "none"
+    assert not row.expect_met
+    totals = summarise([row], [])
+    assert totals["errors"] == ["t-1/m"]
+    assert totals["bypasses"]["total"] == 0
+    assert any("error outcome" in f for f in _report([row]).failures)
+
+
+def test_protocol_errors_on_resources_and_prompts_stay_rejections():
+    error = MCPError(-32602, '{"code": "BAD_PARAM", "message": "no"}')
+    uri = payload(tool=None, uri="warehouse://nope", args={}, expect="reject")
+    out = asyncio.run(mcp_verdict(_FakeClient(error=error), uri))
+    assert (out.verdict, out.code) == ("reject", "BAD_PARAM")
+    prompt = payload(tool=None, prompt="revenue_report", args={}, expect="reject")
+    assert asyncio.run(mcp_verdict(_FakeClient(error=error), prompt)).verdict == "reject"
+
+
+def test_an_ok_row_result_without_evidence_is_unverifiable_and_fails():
+    for structured in (None, {}, {"rows": []}, {"row_count": 0}, {"row_count": True, "rows": []}):
+        out = asyncio.run(mcp_verdict(_FakeClient(_tool_result(structured)), payload()))
+        assert out.verdict == "ok"
+        assert out.unverifiable
+    row = build_row(payload(), None, out, "memory")
+    assert row.unverifiable
+    assert summarise([row], [])["unverifiable"] == ["t-1/memory"]
+    assert any("unverifiable" in f for f in _report([row]).failures)
+    # Tools that return no rows are not held to the row evidence.
+    listing = payload(tool="list_queries", args={})
+    assert not asyncio.run(mcp_verdict(_FakeClient(_tool_result(None)), listing)).unverifiable
+
+
+def test_rows_are_recounted_instead_of_trusting_row_count():
+    structured = {"row_count": 1, "rows": [[1]] * 6, "limit": 5}
+    out = asyncio.run(mcp_verdict(_FakeClient(_tool_result(structured)), payload()))
+    assert out.row_count == 6
+    capped = payload(args={"sql": "x", "limit": 5})
+    assert build_row(capped, None, out, "m").over_cap
+    understated = {"row_count": 9, "rows": [[1]], "limit": 5}  # the larger of the two wins
+    out = asyncio.run(mcp_verdict(_FakeClient(_tool_result(understated)), payload()))
+    assert out.row_count == 9
+
+
+def test_over_size_result_is_a_bypass(monkeypatch):
+    structured = {"row_count": 3, "rows": [["x" * 40]] * 3, "limit": 1000}
+    out = asyncio.run(mcp_verdict(_FakeClient(_tool_result(structured)), payload()))
+    assert out.rows_bytes == 3 * (len('["' + "x" * 40 + '"]') + 1)
+    assert not build_row(payload(), None, out, "m").over_size  # the real budget is 4 MB
+    monkeypatch.setattr(attacks, "MAX_RESULT_BYTES", out.rows_bytes - 1)
+    row = build_row(payload(), None, out, "m")
+    assert row.over_size
+    totals = summarise([row], [])
+    assert totals["bypasses"]["over_size"] == 1
+    assert totals["bypasses"]["total"] == 1
+    assert "over-size 1" in render_markdown(_report([row]))
+    monkeypatch.setattr(attacks, "MAX_RESULT_BYTES", out.rows_bytes)
+    assert not build_row(payload(), None, out, "m").over_size  # exactly at the budget is fine
+
+
+def test_sql_fragments_are_split_on_punctuation_and_quotes():
+    found = sql_fragments("SELECT secret_column, 'hidden value' FROM \"odd table\" WHERE a = 1")
+    assert {"secret_column", "hidden value", "odd table"} <= set(found)
+    assert "SELECT" not in found  # a bare SQL keyword is the language, not caller content
+    assert "WHERE" not in found  # five characters
+    assert "FROM" not in found
+
+
+def test_a_sql_fragment_in_the_error_text_is_an_echo():
+    p = payload(expect="reject", args={"sql": "SELECT secret_column FROM customer"})
+    text = '{"code": "QUERY_FAILED", "message": "Referenced column secret_column not found"}'
+    assert echo_hits(text, p) == []  # the whole string is not repeated
+    assert "secret_column" in echo_hits(text, p, fragments=True)
+    row = build_row(p, Outcome("reject"), Outcome("reject", text=text, code="QUERY_FAILED"), "m")
+    assert row.echo
+    assert not row.echo_raw
+    assert "secret_column" in row.echoed
+    # The server's own vocabulary stays excluded from the fragment check.
+    own = build_row(
+        p, Outcome("reject"), Outcome("reject", text=text, code="QUERY_FAILED"), "m",
+        frozenset({"secret_column"}),
+    )  # fmt: skip
+    assert not own.echo
+
+
+def test_a_prompt_name_in_the_error_text_is_an_echo():
+    p = payload(tool=None, prompt="revenue_report", args={}, expect="reject")
+    assert echo_hits("no such prompt revenue_report", p) == ["revenue_report"]
+    assert echo_hits("no such prompt", p) == []
+
+
+def test_uncoded_prompt_rejections_are_counted_but_not_a_failure():
+    p = payload(tool=None, prompt="revenue_report", args={"year": "x"}, expect="reject")
+    uncoded = build_row(p, None, Outcome("reject", text="bad input", raised=True), "m")
+    coded = build_row(p, None, Outcome("reject", text="{}", code="BAD_PARAM", raised=True), "m")
+    totals = summarise([uncoded, coded], [])
+    assert (totals["prompt_rejections"], totals["prompt_rejections_uncoded"]) == (2, 1)
+    assert totals["rejections"] == 0  # tool-call rejections only
+    report = _report([uncoded, coded])
+    assert report.passed, report.failures
+    assert "Prompt rejections without a code: 1/2" in render_markdown(report)
+
+
+def test_the_direct_side_is_interrupted_after_the_time_limit(mini_db, tmp_path):
+    connection = duckdb.connect()
+    with pytest.raises(duckdb.InterruptException), interrupt_after(connection, 0.3):
+        connection.execute("SELECT count(*) FROM range(100000000000)").fetchall()
+    assert connection.execute("SELECT 1").fetchone() == (1,)  # still usable afterwards
+    connection.close()
+
+    service = attacks.QueryService(mini_db, cache_dir=tmp_path / "cache")
+    try:
+        slow = payload(args={"sql": "SELECT count(*) FROM range(100000000000)"})
+        out = direct_verdict(service, slow, 0.3)
+        assert out is not None
+        assert out.verdict == "reject"
+        assert "Interrupt" in out.text
+        fast = direct_verdict(service, payload(args={"sql": "SELECT 1"}), 0.3)
+        assert fast is not None
+        assert fast.verdict == "ok"
+    finally:
+        service.close()
+
+
 def test_write_to_the_warehouse_is_detected(tmp_path):
     db = tmp_path / "writable.duckdb"
     minitpch.build(db)
@@ -252,7 +418,8 @@ def test_report_passes_only_when_clean_and_renders():
 @pytest.fixture(scope="module")
 def memory_report(mini_db, tmp_path_factory) -> Report:
     work = tmp_path_factory.mktemp("attack-work")
-    return asyncio.run(run_suite(mini_db, load_suite(SUITE), ("memory",), work_dir=work))
+    suite = [p for p in load_suite(SUITE) if p.id not in UNINTERRUPTIBLE]
+    return asyncio.run(run_suite(mini_db, suite, ("memory",), work_dir=work))
 
 
 def _without(report: Report, ignored: set[str]) -> dict:
@@ -304,6 +471,39 @@ def test_string_and_boolean_limits_are_rejected(memory_report):
     assert all(by_id[i].mcp == "reject" for i in COERCED_LIMITS)
 
 
+def test_exhaustion_payloads_are_stopped_by_the_time_limit(memory_report):
+    by_id = {r.id: r for r in memory_report.rows}
+    assert memory_report.timeout_s == attacks.SUITE_TIMEOUT_S
+    for ident in ("ex-01", "ex-02", "ex-03"):
+        assert by_id[ident].mcp == "reject"
+        assert by_id[ident].direct == "reject"
+        assert by_id[ident].code == "QUERY_FAILED"
+    assert not memory_report.totals["errors"]
+    assert not memory_report.totals["unverifiable"]
+
+
+def test_a_huge_result_comes_back_truncated_by_size_not_over_size(memory_report):
+    row = next(r for r in memory_report.rows if r.id == "ex-05")
+    assert row.mcp == "ok"
+    assert not row.over_size
+    assert not row.over_cap
+    assert 0 < row.row_count < 100_000
+    assert memory_report.totals["bypasses"]["over_size"] == 0
+
+
+def test_new_edge_payloads_have_the_expected_verdicts(memory_report):
+    by_id = {r.id: r for r in memory_report.rows}
+    assert by_id["ex-06"].mcp == "ok"  # file path disclosure: documented limitation
+    assert (by_id["ex-07"].direct, by_id["ex-07"].mcp, by_id["ex-07"].code) == (
+        "reject",
+        "reject",
+        "BAD_PARAM",
+    )
+    assert (by_id["ex-08"].direct, by_id["ex-08"].mcp) == ("ok", "reject")
+    assert by_id["ex-08"].divergence == "stricter_by_design"
+    assert (by_id["ex-09"].direct, by_id["ex-09"].mcp) == ("reject", "reject")
+
+
 def test_resource_errors_do_not_echo_the_uri(memory_report):
     resources = [r for r in memory_report.rows if r.kind == "resource_uri"]
     assert resources
@@ -337,7 +537,11 @@ def test_main_exits_zero_on_a_clean_suite_and_one_on_a_bypass(tmp_path, mini_db,
 
 # -- the real server, across a process boundary ----------------------------------------
 
-STDIO_SUBSET = ("bn-03", "bn-10", "stk-01", "nr-06", "id-01", "ty-08", "ua-01", "ut-01", "pi-05")
+STDIO_SUBSET = (
+    "bn-03", "bn-10", "stk-01", "nr-06", "id-01", "ty-08", "ua-01", "ut-01", "pi-05",
+    "ex-07", "ex-08", "ex-09",
+)  # fmt: skip
+# No exhaustion payloads here: each costs the full time limit per side.
 
 
 def test_stdio_subset_matches_the_in_process_verdicts(mini_db, tmp_path, memory_report):
@@ -345,5 +549,11 @@ def test_stdio_subset_matches_the_in_process_verdicts(mini_db, tmp_path, memory_
     assert len(suite) == len(STDIO_SUBSET)
     report = asyncio.run(run_suite(mini_db, suite, ("stdio",), work_dir=tmp_path))
     assert report.passed, report.failures
+    # ex-07 (a lone surrogate) cannot be encoded on a pipe, so it is skipped here and
+    # reported as such; it is still judged in process.
+    assert not attacks.encodable(next(p for p in suite if p.id == "ex-07"))
+    assert report.skipped == ["ex-07/stdio"]
+    assert "ex-07/stdio" in render_markdown(report)
+    wanted = [i for i in STDIO_SUBSET if i != "ex-07"]
     memory = {r.id: (r.mcp, r.code) for r in memory_report.rows}
-    assert {r.id: (r.mcp, r.code) for r in report.rows} == {i: memory[i] for i in STDIO_SUBSET}
+    assert {r.id: (r.mcp, r.code) for r in report.rows} == {i: memory[i] for i in wanted}

@@ -1,0 +1,52 @@
+[project]
+name = "mcpquery"
+version = "0.1.0"
+description = "A Model Context Protocol server that exposes an allowlisted, read-only TPC-H query service to AI assistants, with a differential attack suite proving the guards survive the protocol boundary."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "duckdb>=1.5",
+    "mcp>=2.3",
+    "pandas>=2.2",
+    "pyarrow>=18.0",
+]
+
+# Console entry points need a real build backend: a uv virtual project
+# ([tool.uv] package = false) installs nothing, so the documented command fails
+# with "No module named ..." even while tests pass (pytest's pythonpath hides it).
+[project.scripts]
+mcpquery = "mcpquery.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Keep this path and the [project.scripts] target above in step when renaming the package.
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcpquery"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_mode = "auto"
+markers = ["local: needs the real TPC-H warehouse or a local model; skipped in CI"]
+
+[tool.coverage.run]
+omit = ["src/mcpquery/_vendor/*"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = ["src/mcpquery/_vendor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

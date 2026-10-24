@@ -55,18 +55,28 @@ def build(database: Path = DEFAULT_DB, scale_factor: float = 0.1) -> dict[str, i
 
 
 def connect(database: Path = DEFAULT_DB) -> duckdb.DuckDBPyConnection:
-    """Open the warehouse **read-only**.
+    """Open the warehouse **read-only, with no file-system access**.
 
     This is guard layer 4: even a query that defeated every check above it cannot write,
     because the connection has no write path. It also means many processes -- CLI,
     notebook, tests -- can read the same file at once.
+
+    Read-only is not enough on its own. A single ``SELECT`` can still call DuckDB's table
+    functions -- ``read_text('/etc/passwd')``, ``read_csv(...)``, ``glob('*')`` -- and read
+    any file the process can, which a differential attack suite over this service found.
+    ``enable_external_access = false`` turns those off (and ``ATTACH``, ``COPY``, extension
+    loading with them); ``lock_configuration`` stops a later ``SET`` from turning it back on.
     """
     database = Path(database)
     if not database.exists():
         raise FileNotFoundError(
             f"No warehouse at {database}. Build it first:  uv run query-service build"
         )
-    return duckdb.connect(str(database), read_only=True)
+    return duckdb.connect(
+        str(database),
+        read_only=True,
+        config={"enable_external_access": False, "lock_configuration": True},
+    )
 
 
 def fingerprint(database: Path = DEFAULT_DB) -> str:

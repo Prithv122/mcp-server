@@ -19,19 +19,23 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ResourceError, ToolError
 from mcp.shared.exceptions import MCPError
 from mcp.types import INVALID_PARAMS, CallToolResult, TextContent, ToolAnnotations
-from pydantic import ValidationError
+from pydantic import Strict, ValidationError
 
 from . import __version__, errors
 from .errors import QueryError
 from .service import Gateway
 
 log = logging.getLogger(__name__)
+
+#: Validated in strict mode: the SDK's default lax mode turns ``"5"`` into 5 and ``true``
+#: into 1 before the gateway ever sees the value.
+Limit = Annotated[int, Strict()] | None
 
 READ_ONLY = ToolAnnotations(
     readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
@@ -138,7 +142,7 @@ def build_server(gateway: Gateway, *, allow_adhoc: bool = False) -> GuardedServe
 
     @server.tool(annotations=READ_ONLY)
     def run_query(
-        name: str, params: dict[str, Any] | None = None, limit: int | None = None
+        name: str, params: dict[str, Any] | None = None, limit: Limit = None
     ) -> dict[str, Any]:
         """Run a catalog query by name.
 
@@ -156,7 +160,7 @@ def build_server(gateway: Gateway, *, allow_adhoc: bool = False) -> GuardedServe
     if allow_adhoc:
 
         @server.tool(annotations=READ_ONLY)
-        def run_sql(sql: str, limit: int | None = None) -> dict[str, Any]:
+        def run_sql(sql: str, limit: Limit = None) -> dict[str, Any]:
             """Run one read-only SQL statement (SELECT/WITH). Writes, DDL and multiple
             statements are rejected. Read warehouse://schema for tables and columns."""
             try:

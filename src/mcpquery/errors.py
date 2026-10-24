@@ -45,6 +45,13 @@ def unsafe_query() -> QueryError:
     )
 
 
+def no_file_access() -> QueryError:
+    return QueryError(
+        ErrorCode.UNSAFE_QUERY,
+        "Reading files, attaching databases and loading extensions are disabled.",
+    )
+
+
 def unknown_query(known: list[str]) -> QueryError:
     return QueryError(
         ErrorCode.UNKNOWN_QUERY,

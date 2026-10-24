@@ -25,6 +25,9 @@ from .render import render_frame
 
 log = logging.getLogger(__name__)
 
+#: Keyword arguments of ``QueryService.run`` itself, which a params dict must not reach.
+RESERVED_KWARGS = frozenset({"name", "limit", "use_cache"})
+
 
 def describe(query: Query) -> dict[str, Any]:
     """A catalog entry as the model sees it: what it answers and what it accepts."""
@@ -110,6 +113,14 @@ class Gateway:
         query = self._lookup(name)
         if params is not None and not isinstance(params, dict):
             raise errors.bad_param("params must be an object of parameter name to value.")
+        if params and RESERVED_KWARGS & set(params):
+            # ``QueryService.run(name, *, limit, use_cache, **params)``: splatting a dict whose
+            # keys include ``limit`` or ``use_cache`` would set the service's own control
+            # arguments instead of reaching the catalog, which rejects unknown parameters.
+            raise errors.bad_param(
+                f"params may only hold {query.name}'s own parameters; `limit` goes next to "
+                "`params`, not inside it."
+            )
         with self._classify(query=query):
             result = self.service.run(query.name, limit=_limit(limit), **(params or {}))
         return _payload(result)
@@ -146,6 +157,9 @@ class Gateway:
             if query is None:
                 raise errors.unsafe_query() from exc
             raise _bad_catalog_param(query) from exc
+        except duckdb.PermissionException as exc:
+            # Guard layer 4 refusing a file or network read that layer 3 rightly let through.
+            raise errors.no_file_access() from exc
         except duckdb.Error as exc:
             raise errors.query_failed(type(exc).__name__) from exc
         except Exception as exc:

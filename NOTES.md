@@ -77,3 +77,35 @@ were built in parallel against the core server, each in its own files, and revie
   Changed before the 20 tasks were frozen and before the first model call.
 - `docs://{doc_id}` never sees an id containing `/`, because the template does not match it; the
   adapter also validates ids against the searcher and never uses one as a path.
+
+## 2026-10-25 — first run, fixes, results
+
+- **First attack run failed** (94 payloads, mini fixture): 5 payloads accepted that should have
+  been rejected, on both transports. Three were a real hole in #15's guards (`read_text`,
+  `read_csv`, `glob` through `run_sql` read local files); two were `limit` values the SDK coerced
+  before the server's check. Fixed upstream in #15 (`9363ae5`, local commit, push pending) and here.
+  The first run is reproduced, not just described: `results/attacks/first_run_mini.md` was produced
+  by the current runner on a clean clone with the pre-fix server files (`fdba090`) and the original
+  94 payloads.
+- **The tool-selection eval found a crash** the suite had no payload for: `params: {"limit": 5}`
+  splatted into `QueryService.run(name, *, limit, **params)` gave `TypeError: multiple values for
+  keyword argument 'limit'` and an `INTERNAL` result. A `use_cache` key would have silently reached
+  the cache switch. `params` may no longer hold `name`, `limit` or `use_cache`; three payloads cover it.
+- **Echo rule amended** (EVAL_PLAN Amendment 1): the literal rule flags the server's own published
+  names; filtered 0, unfiltered 104, and all 104 are names like `end_date` and `run_sql`.
+- **Rerun: PASS** on mini and TPC-H sf 0.1, 102 payloads, both transports, 0 bypasses, 0 echoes,
+  152/152 coded, warehouse hash unchanged. About 25 s per run.
+- **Tool selection: 11/20.** The live run used the server at `10a6065` (before the `params` and strict
+  `limit` fixes); the offline replay on the fixed server gives the same 11/20, only `late-3`'s error
+  changes from `INTERNAL` to `BAD_PARAM`. 7/9 misses are inclusive end dates.
+- **Latency:** cached overhead ~3 ms (5 rows) to ~51 ms (1,000 rows); stdio startup 7-10 s. Busy
+  machine (five other project builds running).
+
+### Tried and left
+- Prompt arguments that are missing or the wrong type (`year: "abc"`) are rejected by the SDK
+  before the prompt function runs, and the SDK logs that at ERROR with a traceback on stderr. The
+  client gets a generic "Error rendering prompt" with no echo, so it passes the suite; silencing the
+  log would mean making both arguments optional and validating by hand, which also hides that they
+  are required from clients. Left as is.
+- A CLI subprocess test of the whole suite took 265 s on the busy machine and duplicated the CI step
+  that runs the same command; removed.

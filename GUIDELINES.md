@@ -18,13 +18,13 @@ pandas · uv · ruff · pytest (+ pytest-asyncio). Ollama only for the local too
 
 ## Acceptance criteria
 
-- [ ] Tools `list_queries`, `describe_query`, `run_query` (+ `run_sql` only with `--allow-adhoc`);
+- [x] Tools `list_queries`, `describe_query`, `run_query` (+ `run_sql` only with `--allow-adhoc`);
       resources `warehouse://schema`, `catalog://queries`; prompt `revenue_report`
-- [ ] Every rejection is a JSON body with a stable `code` and never repeats caller input
-- [ ] Attack suite (≥ 30 payloads, pre-registered in `EVAL_PLAN.md`): 0 bypasses, 0 echoes, on the
+- [x] Every rejection is a JSON body with a stable `code` and never repeats caller input
+- [x] Attack suite (≥ 30 payloads, pre-registered in `EVAL_PLAN.md`): 0 bypasses, 0 echoes, on the
       mini fixture and on TPC-H sf 0.1, over in-process and stdio transports
-- [ ] Latency per tool, cold vs cached, protocol overhead against the bare service (informative)
-- [ ] Tool-selection eval with a local model, k/20 with a Wilson interval (informative)
+- [x] Latency per tool, cold vs cached, protocol overhead against the bare service (informative)
+- [x] Tool-selection eval with a local model, k/20 with a Wilson interval (informative)
 - [ ] Runs from a clean clone using only the documented steps
 - [ ] Tests, lint and CI green; README results come from real runs
 

@@ -110,3 +110,41 @@ may not contain `name`, `limit` or `use_cache`.
 3. **What counts as the result.** The README reports the first run above, the fixes, and the
    rerun of the full 102-payload suite on the mini fixture and on TPC-H sf 0.1, over both
    transports.
+
+---
+
+## Amendment 2 — 2026-10-25, after an independent review, before the `[A2]` payloads were run
+
+A review from a clean context (no access to the reasoning that built the suite) tried about 110
+payloads by hand and checked every README number against `results/`. It found no write, no file
+read and no row-cap bypass, and the numbers matched. It found these, all now addressed:
+
+- **Resource exhaustion through `run_sql`** (only with `--allow-adhoc`): no statement time limit
+  (`SELECT count(*) FROM range(10^11)` ran past 40 s and blocked every other call behind the
+  connection lock), and the row cap does not bound bytes (100,000 rows of 2 KB strings returned
+  202 MB). Fixed in the gateway: a per-query time limit (default 10 s) that interrupts DuckDB, and
+  a 4 MB budget on rendered rows (`truncated_by: "size"`). Process memory is not bounded: the
+  vendored service materialises a result in pandas before the budget applies.
+- **Rendering bugs:** LIST values went through numpy's `str()` and lost elements; BLOBs rendered as
+  `bytearray(...)`. Fixed. DECIMAL and HUGEINT arrive as float64 from the upstream pandas conversion;
+  documented, not fixed here.
+- **Overclaim:** the README said every rejection carries a code. The rule above covers tool-call
+  rejections; prompt calls the SDK rejects before the prompt function runs (missing or mistyped
+  arguments, unknown prompt) come back as an uncoded `Internal server error`. Now reported as a
+  separate count.
+- **Runner blind spots:** client exceptions counted as `reject`; an `ok` result without row data could
+  not fail the over-cap check; the echo check compared whole argument strings only; prompt names were
+  not checked. Fixed: a client exception is an `error` that fails the run, missing row data fails the
+  run, `over_size` is a fifth bypass type, and the echo check also tests SQL fragments of 6+
+  characters and prompt names.
+- **Provenance, stated plainly:** `attacks/attacks.jsonl` and the runner were first committed after the
+  first run and its fixes, so "the original 94 are unchanged" means the first 94 lines of the file;
+  it cannot be checked against an earlier commit. The in-session first run was in-process only and
+  its output was not saved; `results/attacks/first_run_mini.md` is a reproduction on a clean clone
+  with the pre-fix server files and both transports.
+
+**Payloads added, marked `[A2]`:** five exhaustion queries (huge `range`, cross join, unbounded
+recursive CTE, a 200M-element list, a 200 MB result that must come back truncated by size), a
+metadata read that discloses the server's file path (`expect: ok`, a documented limitation), a lone
+surrogate, an empty date window, and a trailing-comment query that fails closed. The suite runs with
+a 2 s time limit. The pass rule is unchanged, with `over_size` added as a bypass.

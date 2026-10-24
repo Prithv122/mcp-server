@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "warehouse-query": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/mcp-server",
+        "mcpquery",
+        "serve",
+        "--db",
+        "data/warehouse.duckdb"
+      ]
+    }
+  }
+}

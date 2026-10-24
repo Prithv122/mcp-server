@@ -37,9 +37,11 @@ REGIONS = ("AFRICA", "AMERICA", "ASIA", "EUROPE", "MIDDLE EAST")
 
 INSTRUCTIONS = """\
 Read-only access to a TPC-H sales warehouse (customers, orders, line items, nations,
-regions, suppliers, parts). Prefer the named catalog queries: call list_queries, then
-describe_query for the parameters, then run_query. Dates are ISO strings (YYYY-MM-DD).
-Results are capped by a row limit; `truncated: true` means there may be more rows.
+regions, suppliers, parts). Prefer the named catalog queries. If you do not already know
+a query's parameters, call list_queries and describe_query first, then run_query.
+Dates are ISO strings (YYYY-MM-DD); end_date is exclusive, so all of 1995 is
+start_date 1995-01-01, end_date 1996-01-01. Results are capped by a row limit;
+`truncated: true` means there may be more rows.
 """
 
 
@@ -124,8 +126,10 @@ def build_server(gateway: Gateway, *, allow_adhoc: bool = False) -> GuardedServe
     ) -> dict[str, Any]:
         """Run a catalog query by name.
 
-        `params` maps parameter names to values (dates as YYYY-MM-DD). `limit` caps the
-        rows returned (default 1000, maximum 100000).
+        `params` is one object mapping the query's parameter names to values; put every
+        query parameter inside it, never next to `name`. Optional parameters (those with a
+        default in describe_query) may be left out. Dates are YYYY-MM-DD and end_date is
+        exclusive. `limit` caps the rows returned (default 1000, maximum 100000).
         """
         try:
             return gateway.run_query(name, params, limit)

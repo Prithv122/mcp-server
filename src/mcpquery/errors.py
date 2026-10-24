@@ -71,5 +71,13 @@ def query_failed(kind: str) -> QueryError:
     )
 
 
+def timed_out(seconds: float) -> QueryError:
+    # QUERY_FAILED rather than a new code: the code set is part of the pre-registered contract.
+    return QueryError(
+        ErrorCode.QUERY_FAILED,
+        f"The query exceeded the {seconds:g} s time limit and was stopped.",
+    )
+
+
 def internal() -> QueryError:
     return QueryError(ErrorCode.INTERNAL, "Internal error. The server log has the details.")

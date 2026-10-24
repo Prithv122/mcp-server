@@ -16,7 +16,9 @@ def _serve(args: argparse.Namespace) -> int:
 
     # stdout is the protocol channel on stdio; logs must go to stderr or they corrupt it.
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
-    gateway = Gateway(args.db, cache_dir=args.cache_dir, use_cache=not args.no_cache)
+    gateway = Gateway(
+        args.db, cache_dir=args.cache_dir, use_cache=not args.no_cache, timeout_s=args.timeout
+    )
     try:
         build_server(gateway, allow_adhoc=args.allow_adhoc).run("stdio")
     finally:
@@ -67,6 +69,9 @@ def parser() -> argparse.ArgumentParser:
     serve.add_argument("--no-cache", action="store_true", help="Disable the result cache")
     serve.add_argument(
         "--allow-adhoc", action="store_true", help="Also expose run_sql (off by default)"
+    )
+    serve.add_argument(
+        "--timeout", type=float, default=10.0, help="Seconds before a query is stopped"
     )
     serve.set_defaults(func=_serve)
 

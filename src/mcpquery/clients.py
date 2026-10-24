@@ -28,6 +28,7 @@ def stdio_parameters(
     allow_adhoc: bool = False,
     cache_dir: Path | str | None = None,
     use_cache: bool = True,
+    timeout_s: float | None = None,
 ) -> StdioServerParameters:
     args = ["-m", "mcpquery.cli", "serve", "--db", str(database)]
     if allow_adhoc:
@@ -36,6 +37,8 @@ def stdio_parameters(
         args += ["--cache-dir", str(cache_dir)]
     if not use_cache:
         args.append("--no-cache")
+    if timeout_s is not None:
+        args += ["--timeout", str(timeout_s)]
     return StdioServerParameters(command=sys.executable, args=args)
 
 
@@ -47,17 +50,23 @@ async def open_client(
     allow_adhoc: bool = False,
     cache_dir: Path | str | None = None,
     use_cache: bool = True,
+    timeout_s: float | None = None,
 ) -> AsyncIterator[Client]:
     """A connected client. The caller never sees the gateway, as a real client would not."""
     if transport == "stdio":
         params = stdio_parameters(
-            database, allow_adhoc=allow_adhoc, cache_dir=cache_dir, use_cache=use_cache
+            database,
+            allow_adhoc=allow_adhoc,
+            cache_dir=cache_dir,
+            use_cache=use_cache,
+            timeout_s=timeout_s,
         )
         async with Client(params) as client:
             yield client
         return
     if transport != "memory":
         raise ValueError(f"unknown transport {transport!r}")
-    with Gateway(database, cache_dir=cache_dir, use_cache=use_cache) as gateway:
+    extra = {} if timeout_s is None else {"timeout_s": timeout_s}
+    with Gateway(database, cache_dir=cache_dir, use_cache=use_cache, **extra) as gateway:
         async with Client(build_server(gateway, allow_adhoc=allow_adhoc)) as client:
             yield client

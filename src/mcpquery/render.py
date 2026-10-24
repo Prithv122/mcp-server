@@ -1,19 +1,32 @@
-"""DataFrame -> JSON-safe rows.
+"""DataFrame -> JSON-safe rows, within a size budget.
 
-JSON has no date, decimal or NaN, and pandas hands back all three (plus numpy scalars
-that ``json`` refuses outright). Dates become ISO strings, decimals become strings so no
-precision is lost on the way, and missing values become ``null``.
+JSON has no date, decimal or NaN, and pandas hands back all three (plus numpy scalars and
+arrays that ``json`` refuses outright). Dates become ISO strings, LIST and STRUCT values
+become JSON arrays and objects, BLOBs become hex, and missing values become ``null``.
+
+Precision: the vendored service materialises results with DuckDB's pandas conversion,
+which turns DECIMAL and HUGEINT into float64 before this module sees them. Values with
+more than about 15 significant digits lose precision. TPC-H's money columns at the scale
+used here (the largest sum has 14 significant digits) are inside that; a warehouse with larger exact
+values would need the service to return Arrow or Python objects instead.
+
+Size: the row cap bounds rows, not bytes; 100,000 rows of 2 KB strings is 200 MB. Rendering
+stops at ``MAX_RESULT_BYTES`` and the result is marked truncated by size.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 import decimal
+import json
 import math
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+#: Upper bound on the rendered rows, in bytes of compact JSON.
+MAX_RESULT_BYTES = 4_000_000
 
 
 def to_json_value(value: Any) -> Any:
@@ -29,8 +42,12 @@ def to_json_value(value: Any) -> Any:
         return value.isoformat()
     if isinstance(value, decimal.Decimal):
         return str(value)
-    if isinstance(value, bytes):
-        return value.hex()
+    if isinstance(value, bytes | bytearray | memoryview):
+        return bytes(value).hex()
+    if isinstance(value, np.ndarray | list | tuple):
+        return [to_json_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): to_json_value(item) for key, item in value.items()}
     if isinstance(value, bool | int | str):
         return value
     try:
@@ -65,8 +82,19 @@ def render_frame(frame: pd.DataFrame) -> dict[str, Any]:
     """Columns and rows, row-major, every cell JSON-safe."""
     columns = [str(column) for column in frame.columns]
     frame = _dates_as_dates(frame)
-    rows = [
-        [to_json_value(cell) for cell in record]
-        for record in frame.itertuples(index=False, name=None)
-    ]
-    return {"columns": columns, "rows": rows, "row_count": len(rows)}
+    rows: list[list[Any]] = []
+    size = 0
+    size_truncated = False
+    for record in frame.itertuples(index=False, name=None):
+        row = [to_json_value(cell) for cell in record]
+        size += len(json.dumps(row, separators=(",", ":"))) + 1
+        if size > MAX_RESULT_BYTES:
+            size_truncated = True
+            break
+        rows.append(row)
+    return {
+        "columns": columns,
+        "rows": rows,
+        "row_count": len(rows),
+        "size_truncated": size_truncated,
+    }

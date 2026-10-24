@@ -28,6 +28,11 @@ log = logging.getLogger(__name__)
 #: Keyword arguments of ``QueryService.run`` itself, which a params dict must not reach.
 RESERVED_KWARGS = frozenset({"name", "limit", "use_cache"})
 
+#: Wall-clock limit per query. The row cap bounds what comes back, not how long a query runs:
+#: ``SELECT count(*) FROM range(10^11)`` returns one row after minutes, and holds the lock
+#: (so every other call waits) the whole time.
+DEFAULT_TIMEOUT_S = 10.0
+
 
 def describe(query: Query) -> dict[str, Any]:
     """A catalog entry as the model sees it: what it answers and what it accepts."""
@@ -71,8 +76,10 @@ class Gateway:
         *,
         cache_dir: Path | str | None = None,
         use_cache: bool = True,
+        timeout_s: float = DEFAULT_TIMEOUT_S,
     ) -> None:
         self.service = QueryService(database, cache_dir=cache_dir, use_cache=use_cache)
+        self.timeout_s = timeout_s
         # A DuckDB connection is not safe for concurrent use, and the SDK runs sync tools
         # on worker threads. One lock keeps two tool calls from sharing it mid-query.
         self._lock = threading.Lock()
@@ -121,13 +128,18 @@ class Gateway:
                 f"params may only hold {query.name}'s own parameters; `limit` goes next to "
                 "`params`, not inside it."
             )
+        for value in (params or {}).values():
+            if isinstance(value, str):
+                _require_unicode(value)
         with self._classify(query=query):
+            _check_window(query, params or {})
             result = self.service.run(query.name, limit=_limit(limit), **(params or {}))
         return _payload(result)
 
     def run_sql(self, sql: Any, limit: Any = None) -> dict[str, Any]:
         if not isinstance(sql, str):
             raise errors.bad_param("sql must be a string.")
+        _require_unicode(sql)
         with self._classify(query=None):
             result = self.service.run_sql(sql, limit=_limit(limit))
         return _payload(result)
@@ -146,13 +158,39 @@ class Gateway:
         return [{"table": table, "columns": columns} for table, columns in tables.items()]
 
     @contextmanager
+    def _deadline(self) -> Iterator[None]:
+        """Interrupt the connection if the block outlives ``timeout_s``.
+
+        DuckDB has no statement timeout setting, but ``interrupt()`` is safe to call from
+        another thread and makes the running query raise ``InterruptException``. ``done``
+        keeps a timer that fires just after the query finished from interrupting nothing.
+        """
+        connection = self.service.connection
+        done = threading.Event()
+
+        def fire() -> None:
+            if not done.is_set():
+                connection.interrupt()
+
+        timer = threading.Timer(self.timeout_s, fire)
+        timer.daemon = True
+        timer.start()
+        try:
+            yield
+        finally:
+            done.set()
+            timer.cancel()
+
+    @contextmanager
     def _classify(self, *, query: Query | None) -> Iterator[None]:
         """Turn whatever the service raises into a :class:`QueryError` without caller text."""
         try:
-            with self._lock:
+            with self._lock, self._deadline():
                 yield
         except QueryError:
             raise
+        except duckdb.InterruptException as exc:
+            raise errors.timed_out(self.timeout_s) from exc
         except UnsafeQuery as exc:
             if query is None:
                 raise errors.unsafe_query() from exc
@@ -181,6 +219,22 @@ def _limit(limit: Any) -> int | None:
     return limit
 
 
+def _require_unicode(text: str) -> None:
+    """JSON can carry a lone UTF-16 surrogate escape; DuckDB's binding cannot take it."""
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise errors.bad_param("Text arguments must be valid Unicode.") from exc
+
+
+def _check_window(query: Query, params: dict[str, Any]) -> None:
+    """Reject an empty date window instead of returning an empty, plausible-looking result."""
+    _, values = query.bind(params)
+    start, end = values.get("start_date"), values.get("end_date")
+    if start is not None and end is not None and start >= end:
+        raise errors.bad_param("end_date must be after start_date (end_date is exclusive).")
+
+
 def _bad_catalog_param(query: Query) -> QueryError:
     """One message for every bad argument to a catalog query: the full, server-side spec.
 
@@ -196,8 +250,10 @@ def _bad_catalog_param(query: Query) -> QueryError:
 
 def _payload(result: Any) -> dict[str, Any]:
     body = render_frame(result.frame)
+    by_size = body.pop("size_truncated")
     body.update(
-        truncated=result.truncated,
+        truncated=result.truncated or by_size,
+        truncated_by="size" if by_size else ("rows" if result.truncated else None),
         cached=result.cached,
         elapsed_ms=round(result.elapsed_ms, 3),
         limit=result.limit,

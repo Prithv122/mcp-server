@@ -216,3 +216,46 @@ async def test_limit_is_strictly_an_integer(gateway, limit):
     async with Client(build_server(gateway)) as client:
         result = await client.call_tool("run_query", args)
     assert error_of(result)["code"] == "BAD_PARAM"
+
+
+async def test_runaway_query_is_stopped(mini_db, tmp_path):
+    from mcpquery.clients import open_client
+
+    async with open_client(
+        mini_db, allow_adhoc=True, use_cache=False, timeout_s=0.5, cache_dir=tmp_path / "c"
+    ) as client:
+        slow = await client.call_tool("run_sql", {"sql": "SELECT count(*) FROM range(10000000000)"})
+        after = await client.call_tool("run_sql", {"sql": "SELECT 1 AS one"})
+    assert error_of(slow)["code"] == "QUERY_FAILED"
+    assert "time limit" in error_of(slow)["message"]
+    assert after.structured_content["rows"] == [[1]]
+
+
+async def test_empty_date_window_is_rejected(gateway):
+    args = {
+        "name": "late_shipments",
+        "params": {"start_date": "1995-01-01", "end_date": "1995-01-01"},
+    }
+    async with Client(build_server(gateway)) as client:
+        result = await client.call_tool("run_query", args)
+    assert error_of(result)["code"] == "BAD_PARAM"
+
+
+async def test_lone_surrogate_is_bad_param(gateway):
+    async with Client(build_server(gateway, allow_adhoc=True)) as client:
+        result = await client.call_tool("run_sql", {"sql": "SELECT '" + chr(0xD800) + "'"})
+    assert error_of(result)["code"] == "BAD_PARAM"
+
+
+async def test_result_reports_size_truncation(gateway, monkeypatch):
+    from mcpquery import render
+
+    monkeypatch.setattr(render, "MAX_RESULT_BYTES", 200)
+    async with Client(build_server(gateway, allow_adhoc=True)) as client:
+        result = await client.call_tool(
+            "run_sql", {"sql": "SELECT repeat('x', 50) AS s FROM range(100)", "limit": 100}
+        )
+    body = result.structured_content
+    assert body["truncated"] is True
+    assert body["truncated_by"] == "size"
+    assert body["row_count"] < 100

@@ -184,11 +184,13 @@ def build_server(gateway: Gateway, *, allow_adhoc: bool = False) -> GuardedServe
     def revenue_report(region: str, year: int) -> str:
         """Ask for a one-page revenue summary of one region and year."""
         # Prompt arguments become prompt text, so they are allowlisted like identifiers.
+        # MCPError passes through the SDK untouched; anything else is logged as a crash.
         if region not in REGIONS:
-            raise ValueError(f"region must be one of {list(REGIONS)}")
-        year = int(year)
+            error = errors.bad_param(f"region must be one of {list(REGIONS)}.")
+            raise MCPError(code=INVALID_PARAMS, message=error.to_json())
         if not 1992 <= year <= 1998:
-            raise ValueError("year must be between 1992 and 1998 (the TPC-H order range)")
+            error = errors.bad_param("year must be between 1992 and 1998 (the TPC-H order range).")
+            raise MCPError(code=INVALID_PARAMS, message=error.to_json())
         return (
             f"Write a short revenue report for region {region} in {year}. "
             f"Use run_query with top_customers (start_date {year}-01-01, end_date "

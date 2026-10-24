@@ -73,3 +73,40 @@ the fix, and the rerun.
 
 A divergence is a better README than a clean pass. If the suite finds a bypass in the vendored
 guards themselves, the fix belongs upstream in `15-query-service`, and this repo re-vendors it.
+
+---
+
+## Amendment 1 — 2026-10-25, after the first run on the mini fixture, before any run on TPC-H
+
+**First run** (94 payloads, mini fixture, in-process): **5 bypasses**, 0 writes, 0 over-cap,
+0 looser divergences, 63/63 rejections coded. All 5 were kind 4 (`expect: reject`, MCP accepted):
+
+- `fs-01`..`fs-03`: `glob('*')`, `read_csv(...)` and `read_text(...)` through `run_sql` returned
+  rows. The bare service accepted them too, so this was a hole in the vendored guards: a table
+  function is a single `SELECT`, and a read-only connection blocks writes, not file reads.
+  Fixed upstream (`query-service` `9363ae5`: the connection opens with external access disabled
+  and its configuration locked) and re-vendored.
+- `lm-04`, `lm-05`: `limit: "5"` and `limit: true`. This plan listed both as expected
+  stricter-by-design rejections, but the SDK's lax validation coerced them to 5 and 1 before the
+  server's own check ran. Not a security bypass (both are within the cap), but the declared
+  behaviour did not happen. Fixed: `limit` is validated in strict mode.
+
+The tool-selection eval (run separately) found a sixth problem: a model put `limit` inside
+`params`, which collided with `QueryService.run(..., limit=...)` and crashed as `INTERNAL`. A key
+named `use_cache` would have reached the service's cache switch the same way. Fixed: `params`
+may not contain `name`, `limit` or `use_cache`.
+
+**Changes to the plan:**
+
+1. **Echo rule.** Read literally, the rule flags the server's own published words: a rejection
+   that says `limit must be an integer` "echoes" a payload whose key is `limit`. Strings that
+   appear in the server's published vocabulary (tool names, argument and parameter names, query
+   names, allowed enum and identifier values) are excluded from the echo check. The unfiltered
+   count is reported next to the filtered one so the exclusion is visible.
+2. **Payloads added after the first run** are marked `[A1]` in their note: `fs-04`..`fs-08`
+   (more file and network reads, including a quoted file name in `FROM`), `ps-01`..`ps-03`
+   (params smuggling the service's own keyword arguments). The original 94 are unchanged. The
+   pass rule is unchanged.
+3. **What counts as the result.** The README reports the first run above, the fixes, and the
+   rerun of the full 102-payload suite on the mini fixture and on TPC-H sf 0.1, over both
+   transports.

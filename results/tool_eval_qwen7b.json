@@ -1,0 +1,1107 @@
+{
+  "model": "qwen2.5:7b-instruct-q4_K_M",
+  "k": 11,
+  "n": 20,
+  "wilson95": [
+    0.3421,
+    0.7418
+  ],
+  "categories": {
+    "ok": 11,
+    "no_tool_call": 0,
+    "wrong_tool": 0,
+    "wrong_query": 0,
+    "wrong_params": 8,
+    "server_rejected": 1
+  },
+  "mean_turns": 2.0,
+  "model_wall_s": 828.294,
+  "results": [
+    {
+      "id": "dov-1",
+      "expected_name": "daily_order_volume",
+      "category": "ok",
+      "correct": true,
+      "server_ok": true,
+      "detail": "",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "daily_order_volume",
+          "params": {
+            "end_date": "1994-04-01",
+            "segment": "ALL",
+            "start_date": "1994-03-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "ca17b06abdf3bd34c9a2df49e1457cfec3f7256f0bc49083f2ca428252e1af31",
+          "cached": false,
+          "wall_s": 44.483,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "daily_order_volume"
+              }
+            }
+          ]
+        },
+        {
+          "key": "dccab900e10101543995499b58555515cbba1552a1088a42c5c9621031355baa",
+          "cached": false,
+          "wall_s": 22.805,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "daily_order_volume",
+                "params": {
+                  "end_date": "1994-04-01",
+                  "segment": "ALL",
+                  "start_date": "1994-03-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dov-2",
+      "expected_name": "daily_order_volume",
+      "category": "ok",
+      "correct": true,
+      "server_ok": true,
+      "detail": "",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "daily_order_volume",
+          "params": {
+            "end_date": "1995-10-01",
+            "segment": "AUTOMOBILE",
+            "start_date": "1995-07-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "863e51a63942a9695aaddea6c1f75f8abc86b56caa9fd361c32db697d727f566",
+          "cached": false,
+          "wall_s": 11.028,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "daily_order_volume"
+              }
+            }
+          ]
+        },
+        {
+          "key": "ef91ee839ac4c3626e27db4864264aab37a88f9e478b04dd112bcd053fff32f2",
+          "cached": false,
+          "wall_s": 24.377,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "daily_order_volume",
+                "params": {
+                  "end_date": "1995-10-01",
+                  "segment": "AUTOMOBILE",
+                  "start_date": "1995-07-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dov-3",
+      "expected_name": "daily_order_volume",
+      "category": "ok",
+      "correct": true,
+      "server_ok": true,
+      "detail": "",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "daily_order_volume",
+          "params": {
+            "end_date": "1997-01-01",
+            "segment": "HOUSEHOLD",
+            "start_date": "1996-01-01"
+          },
+          "limit": 1000
+        }
+      },
+      "turns": [
+        {
+          "key": "823c6bc40ea85f9a489bd98c4eaf5c25b5e72446a111cbd5a1280d72666e8e50",
+          "cached": false,
+          "wall_s": 10.63,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "daily_order_volume"
+              }
+            }
+          ]
+        },
+        {
+          "key": "9221e83f32135a20dc793a2841969852f1d0504b97e801eb9740bc5d4355090a",
+          "cached": false,
+          "wall_s": 27.544,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "daily_order_volume",
+                "params": {
+                  "end_date": "1997-01-01",
+                  "segment": "HOUSEHOLD",
+                  "start_date": "1996-01-01"
+                },
+                "limit": 1000
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dov-4",
+      "expected_name": "daily_order_volume",
+      "category": "wrong_params",
+      "correct": false,
+      "server_ok": true,
+      "detail": "end_date: got '1993-01-31', expected '1993-02-01'",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "daily_order_volume",
+          "params": {
+            "end_date": "1993-01-31",
+            "segment": "MACHINERY",
+            "start_date": "1993-01-15"
+          },
+          "limit": null
+        }
+      },
+      "turns": [
+        {
+          "key": "ebde525d5c56ceef7d8b251e475e1cdd13fb59f71bf1ec368ac3aa305958e582",
+          "cached": false,
+          "wall_s": 11.285,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "daily_order_volume"
+              }
+            }
+          ]
+        },
+        {
+          "key": "40835785b494d380932927d85946bc202f4711b139eb83bc9e885d8044e2a4b6",
+          "cached": false,
+          "wall_s": 23.482,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "daily_order_volume",
+                "params": {
+                  "end_date": "1993-01-31",
+                  "segment": "MACHINERY",
+                  "start_date": "1993-01-15"
+                },
+                "limit": null
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dov-5",
+      "expected_name": "daily_order_volume",
+      "category": "ok",
+      "correct": true,
+      "server_ok": true,
+      "detail": "",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "params": {
+            "end_date": "1997-07-01",
+            "segment": "BUILDING",
+            "start_date": "1997-01-01"
+          },
+          "name": "daily_order_volume"
+        }
+      },
+      "turns": [
+        {
+          "key": "12e934faf48a22849de09c04aa23bc1580c92d2c2ddae5ae322070c26cc00f7e",
+          "cached": false,
+          "wall_s": 10.006,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "daily_order_volume"
+              }
+            }
+          ]
+        },
+        {
+          "key": "531c3dc15b20762ea334bea813de019d076569df4693919ee08bd3f9fab0298b",
+          "cached": false,
+          "wall_s": 22.217,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "params": {
+                  "end_date": "1997-07-01",
+                  "segment": "BUILDING",
+                  "start_date": "1997-01-01"
+                },
+                "name": "daily_order_volume"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "late-1",
+      "expected_name": "late_shipments",
+      "category": "ok",
+      "correct": true,
+      "server_ok": true,
+      "detail": "",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "late_shipments",
+          "params": {
+            "end_date": "1996-01-01",
+            "start_date": "1995-01-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "e7f8a222860d11500e27b371704e10c7373f6967e7e72616a1867ecb4d5db9b3",
+          "cached": false,
+          "wall_s": 10.429,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "late_shipments"
+              }
+            }
+          ]
+        },
+        {
+          "key": "91821baecacd7ee2e92f8dc1146d1c9e0d16ccc9529e33cd6baa45453cc385ce",
+          "cached": false,
+          "wall_s": 22.204,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "late_shipments",
+                "params": {
+                  "end_date": "1996-01-01",
+                  "start_date": "1995-01-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "late-2",
+      "expected_name": "late_shipments",
+      "category": "ok",
+      "correct": true,
+      "server_ok": true,
+      "detail": "",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "late_shipments",
+          "params": {
+            "end_date": "1997-01-01",
+            "start_date": "1996-10-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "cdbf1a07a7709a0aec3f6385f3879f9d62249f245df809aa401efccf1d02d71c",
+          "cached": false,
+          "wall_s": 22.544,
+          "content": "To answer this question, we need to use the `late_shipments` query to find the late delivery rates for each order priority in Q4 1996. Let's first describe the `late_shipments` query to ensure we have the correct parameters.\n\n",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "late_shipments"
+              }
+            }
+          ]
+        },
+        {
+          "key": "e05e5be06706f91f0ba02b3676f0322b27f457d8902148c8d53becc7a9b07514",
+          "cached": false,
+          "wall_s": 37.251,
+          "content": "The `late_shipments` query requires `start_date` and `end_date` parameters. For Q4 1996, the start date is 1996-10-01 and the end date is 1997-01-01 (exclusive). Now, let's run the query with these dates to get the late delivery rates by order priority.\n",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "late_shipments",
+                "params": {
+                  "end_date": "1997-01-01",
+                  "start_date": "1996-10-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "late-3",
+      "expected_name": "late_shipments",
+      "category": "server_rejected",
+      "correct": false,
+      "server_ok": false,
+      "detail": "{\"code\": \"INTERNAL\", \"message\": \"Internal error. The server log has the details.\"}",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "late_shipments",
+          "params": {
+            "end_date": "1993-03-01",
+            "limit": null,
+            "start_date": "1993-02-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "cfb70ba303b0c249f10c8f268f1bc8ad2807b2664d6150488ed9170a910c19d9",
+          "cached": false,
+          "wall_s": 9.084,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "late_shipments"
+              }
+            }
+          ]
+        },
+        {
+          "key": "25a0555f6a617960dc93c8a5259e780c84326d159179ce158eb6f3f42675815f",
+          "cached": false,
+          "wall_s": 20.366,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "late_shipments",
+                "params": {
+                  "end_date": "1993-03-01",
+                  "limit": null,
+                  "start_date": "1993-02-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "late-4",
+      "expected_name": "late_shipments",
+      "category": "wrong_params",
+      "correct": false,
+      "server_ok": false,
+      "detail": "unknown parameter 'o_orderpriority'",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "late_shipments",
+          "params": {
+            "end_date": "1998-04-01",
+            "o_orderpriority": "1-URGENT",
+            "start_date": "1998-01-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "29b923420fdc2bef2336f63b4f9d335490bf1abebb291b4bf789a756c03b7b7c",
+          "cached": false,
+          "wall_s": 41.213,
+          "content": "To answer this question, we can use the `late_shipments` query to check the share of late deliveries by order priority. We'll focus on the first quarter of 1998, which is from 1998-01-01 to 1998-04-01.\n\nLet's call the `describe_query` function to get the details of the `late_shipments` query parameters.\n",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "late_shipments"
+              }
+            }
+          ]
+        },
+        {
+          "key": "57d6585f3758bf3640144b10d5902d1b8763166fe59f0dd77b53657fe52af302",
+          "cached": false,
+          "wall_s": 11.286,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "late_shipments"
+              }
+            }
+          ]
+        },
+        {
+          "key": "6d44e07a397e09ccb9c1f3f6acfdd75ab9772ac5d0cd35b1b3720b00b8e23345",
+          "cached": false,
+          "wall_s": 49.167,
+          "content": "Now that we have the details of the `late_shipments` query, we can run it for the first quarter of 1998. The `start_date` is 1998-01-01 and the `end_date` is 1998-04-01. We will also include the `o_orderpriority` parameter to see if urgent orders are more likely to be late.\n\nLet's call the `run_query` function with the appropriate parameters.\n",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "late_shipments",
+                "params": {
+                  "end_date": "1998-04-01",
+                  "o_orderpriority": "1-URGENT",
+                  "start_date": "1998-01-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "late-5",
+      "expected_name": "late_shipments",
+      "category": "wrong_params",
+      "correct": false,
+      "server_ok": true,
+      "detail": "end_date: got '1994-12-31', expected '1995-01-01'",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "late_shipments",
+          "params": {
+            "end_date": "1994-12-31",
+            "start_date": "1994-07-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "28e425071983d0de49bb83d7206f60e588caa498833f128a86e91c6215c768cd",
+          "cached": false,
+          "wall_s": 10.087,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "late_shipments"
+              }
+            }
+          ]
+        },
+        {
+          "key": "9e7211554e854268856ab5c3206d3d2ea984c6a928167ca9a69edc6412a98557",
+          "cached": false,
+          "wall_s": 18.926,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "late_shipments",
+                "params": {
+                  "end_date": "1994-12-31",
+                  "start_date": "1994-07-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rev-1",
+      "expected_name": "revenue_by_dimension",
+      "category": "ok",
+      "correct": true,
+      "server_ok": true,
+      "detail": "",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "params": {
+            "dimension": "n_name",
+            "end_date": "1998-01-01",
+            "start_date": "1997-01-01"
+          },
+          "limit": null,
+          "name": "revenue_by_dimension"
+        }
+      },
+      "turns": [
+        {
+          "key": "d2e0b37e87692f91c477a491c09866d3c1c1ac9ec0ea55973dca669808355c45",
+          "cached": false,
+          "wall_s": 16.81,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "revenue_by_dimension"
+              }
+            }
+          ]
+        },
+        {
+          "key": "236e1fee4a8a46b4419efb81b0bd1d7df5055375ba2f2a113ce031cf28b3f7c9",
+          "cached": false,
+          "wall_s": 21.211,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "params": {
+                  "dimension": "n_name",
+                  "end_date": "1998-01-01",
+                  "start_date": "1997-01-01"
+                },
+                "limit": null,
+                "name": "revenue_by_dimension"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rev-2",
+      "expected_name": "revenue_by_dimension",
+      "category": "ok",
+      "correct": true,
+      "server_ok": true,
+      "detail": "",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "revenue_by_dimension",
+          "params": {
+            "dimension": "r_name",
+            "end_date": "1993-07-01",
+            "start_date": "1993-04-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "0b689c5086df4471ee6c09f4862a6b045dc0aba154137555b7d8eb48f718798f",
+          "cached": false,
+          "wall_s": 28.344,
+          "content": "To answer your question, we can use the `revenue_by_dimension` query to group the revenue by the region and filter the data for Q2 1993. Let's run this query with the appropriate parameters.\n\nFirst, I will describe the `revenue_by_dimension` query to ensure we have the correct parameters.\n",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "revenue_by_dimension"
+              }
+            }
+          ]
+        },
+        {
+          "key": "3d4f38ca885fa6d05778e202bc00d9c5d08e2a5639b5c0a48b80779fb33050d7",
+          "cached": false,
+          "wall_s": 49.134,
+          "content": "Now that we have the details of the `revenue_by_dimension` query, we can proceed to run it with the appropriate parameters for Q2 1993. The start date for Q2 1993 is 1993-04-01 and the end date is 1993-07-01. We will group the revenue by the region (`r_name`).\n\nLet's run the query with these parameters.\n",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "revenue_by_dimension",
+                "params": {
+                  "dimension": "r_name",
+                  "end_date": "1993-07-01",
+                  "start_date": "1993-04-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rev-3",
+      "expected_name": "revenue_by_dimension",
+      "category": "wrong_params",
+      "correct": false,
+      "server_ok": true,
+      "detail": "end_date: got '1994-12-31', expected '1995-01-01'",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "params": {
+            "dimension": "c_mktsegment",
+            "end_date": "1994-12-31",
+            "start_date": "1994-01-01"
+          },
+          "name": "revenue_by_dimension"
+        }
+      },
+      "turns": [
+        {
+          "key": "54ce797c5fce58884a6f42a92f41e3a1b2de2e0480a93132994dd7396e518fd7",
+          "cached": false,
+          "wall_s": 18.352,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "revenue_by_dimension"
+              }
+            }
+          ]
+        },
+        {
+          "key": "0a2b2df3ac7ca7f2065757e6dbbf3d385b21ab3137f2868d154cf44f050cf168",
+          "cached": false,
+          "wall_s": 22.37,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "params": {
+                  "dimension": "c_mktsegment",
+                  "end_date": "1994-12-31",
+                  "start_date": "1994-01-01"
+                },
+                "name": "revenue_by_dimension"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rev-4",
+      "expected_name": "revenue_by_dimension",
+      "category": "wrong_params",
+      "correct": false,
+      "server_ok": true,
+      "detail": "end_date: got '1996-11-30', expected '1996-12-01'",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "revenue_by_dimension",
+          "params": {
+            "dimension": "o_orderpriority",
+            "end_date": "1996-11-30",
+            "start_date": "1996-06-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "95c200565cf48cc1d9821ba6258372b217b0e8afe8706aed4f8f20668052f08f",
+          "cached": false,
+          "wall_s": 11.159,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "revenue_by_dimension"
+              }
+            }
+          ]
+        },
+        {
+          "key": "fc1b8bc22ff1bc5130750a30b57c88ab2f1f036145b09fbbd00bc48b8180fbcb",
+          "cached": false,
+          "wall_s": 21.909,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "revenue_by_dimension",
+                "params": {
+                  "dimension": "o_orderpriority",
+                  "end_date": "1996-11-30",
+                  "start_date": "1996-06-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rev-5",
+      "expected_name": "revenue_by_dimension",
+      "category": "ok",
+      "correct": true,
+      "server_ok": true,
+      "detail": "",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "revenue_by_dimension",
+          "params": {
+            "dimension": "l_shipmode",
+            "end_date": "1996-01-01",
+            "start_date": "1995-01-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "021b4eff3c4b50a19540d8f782b61cb710cc2b19d5cccdbb6c214651e1a82862",
+          "cached": false,
+          "wall_s": 9.889,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "revenue_by_dimension"
+              }
+            }
+          ]
+        },
+        {
+          "key": "5268b618b694bb3e53ae9bce94c7a2fae9dbd4bd9e3bd6f6547d3d12f558c681",
+          "cached": false,
+          "wall_s": 20.698,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "revenue_by_dimension",
+                "params": {
+                  "dimension": "l_shipmode",
+                  "end_date": "1996-01-01",
+                  "start_date": "1995-01-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "top-1",
+      "expected_name": "top_customers",
+      "category": "wrong_params",
+      "correct": false,
+      "server_ok": true,
+      "detail": "end_date: got '1996-12-31', expected '1997-01-01'",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "top_customers",
+          "params": {
+            "end_date": "1996-12-31",
+            "region": "EUROPE",
+            "start_date": "1996-01-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "f518892a63c158232e67dd24a1fffdf5a859676842ebe14c1a5756e1dc8fcb29",
+          "cached": false,
+          "wall_s": 9.528,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "top_customers"
+              }
+            }
+          ]
+        },
+        {
+          "key": "e8207d02f73431a958e0c92bb77ced15a604b443e700e39c59093e0afd49f369",
+          "cached": false,
+          "wall_s": 21.011,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "top_customers",
+                "params": {
+                  "end_date": "1996-12-31",
+                  "region": "EUROPE",
+                  "start_date": "1996-01-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "top-2",
+      "expected_name": "top_customers",
+      "category": "ok",
+      "correct": true,
+      "server_ok": true,
+      "detail": "",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "top_customers",
+          "params": {
+            "end_date": "1994-04-01",
+            "min_orders": 3,
+            "region": "MIDDLE EAST",
+            "start_date": "1994-01-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "4fd98a88094ccdee66436c063321a9aa59168a233709cbb571567a9721bb59ae",
+          "cached": false,
+          "wall_s": 9.469,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "top_customers"
+              }
+            }
+          ]
+        },
+        {
+          "key": "01faafbec8577ec8f89f757843958e9099467cc0b7d5069d79a8f884ed56797b",
+          "cached": false,
+          "wall_s": 25.66,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "top_customers",
+                "params": {
+                  "end_date": "1994-04-01",
+                  "min_orders": 3,
+                  "region": "MIDDLE EAST",
+                  "start_date": "1994-01-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "top-3",
+      "expected_name": "top_customers",
+      "category": "wrong_params",
+      "correct": false,
+      "server_ok": true,
+      "detail": "end_date: got '1995-12-31', expected '1996-01-01'",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "top_customers",
+          "params": {
+            "end_date": "1995-12-31",
+            "region": "ASIA",
+            "start_date": "1995-07-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "6fddc485fe4563a151eb724f5b4db490906659be01639a05c6f70163768ba797",
+          "cached": false,
+          "wall_s": 20.392,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "top_customers",
+                "params": {
+                  "end_date": "1995-12-31",
+                  "region": "ASIA",
+                  "start_date": "1995-07-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "top-4",
+      "expected_name": "top_customers",
+      "category": "ok",
+      "correct": true,
+      "server_ok": true,
+      "detail": "",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "top_customers",
+          "params": {
+            "end_date": "1992-04-01",
+            "min_orders": 2,
+            "region": "AFRICA",
+            "start_date": "1992-03-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "9bc4f1ed1e2880b9f93e68a04c19b89f740076c29e56b9965a23d16fe6450f57",
+          "cached": false,
+          "wall_s": 7.832,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "top_customers"
+              }
+            }
+          ]
+        },
+        {
+          "key": "efe55028bd3ccae29eef2ecd01fc402f90f0b6ae2a335af094aa6e00e3af2423",
+          "cached": false,
+          "wall_s": 22.698,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "top_customers",
+                "params": {
+                  "end_date": "1992-04-01",
+                  "min_orders": 2,
+                  "region": "AFRICA",
+                  "start_date": "1992-03-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "top-5",
+      "expected_name": "top_customers",
+      "category": "wrong_params",
+      "correct": false,
+      "server_ok": true,
+      "detail": "end_date: got '1993-12-31', expected '1994-01-01'",
+      "called": {
+        "name": "run_query",
+        "arguments": {
+          "name": "top_customers",
+          "params": {
+            "end_date": "1993-12-31",
+            "min_orders": 5,
+            "region": "AMERICA",
+            "start_date": "1993-01-01"
+          }
+        }
+      },
+      "turns": [
+        {
+          "key": "f4ae7f43b798abb68db3860a794042800a4e26313da800806081bbb17da54bcb",
+          "cached": false,
+          "wall_s": 9.407,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "describe_query",
+              "arguments": {
+                "name": "top_customers"
+              }
+            }
+          ]
+        },
+        {
+          "key": "577681910ec29c0e210511356c1991718ce67dd61e73b20c6a1e0b097b0d4a0c",
+          "cached": false,
+          "wall_s": 22.007,
+          "content": "",
+          "tool_calls": [
+            {
+              "name": "run_query",
+              "arguments": {
+                "name": "top_customers",
+                "params": {
+                  "end_date": "1993-12-31",
+                  "min_orders": 5,
+                  "region": "AMERICA",
+                  "start_date": "1993-01-01"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

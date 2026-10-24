@@ -30,3 +30,6 @@ jobs:
 
       - name: Test
         run: uv run pytest --cov=src --cov-report=term-missing
+
+      - name: Attack suite on the offline fixture (fails on any bypass or echo)
+        run: uv run mcpquery attack-suite

@@ -70,18 +70,141 @@ Every rejection is `is_error: true` with a JSON body `{"code", "message"}`, `cod
 | Transport | stdio only | also Streamable HTTP | HTTP means authentication and hosting; a local assistant launches the server as a subprocess |
 | DuckDB | pinned to 1.5.5 (#15's lock) | latest 2.x | the parser-based read check is engine behaviour; test it on the engine it shipped on |
 | Success criterion | pre-registered in [`EVAL_PLAN.md`](EVAL_PLAN.md) before the suite was written | judging the suite after seeing it | the payloads cannot be chosen to fit the result |
+| File access | connection opened with external access disabled and its configuration locked (fixed upstream in #15) | trusting "read-only" | read-only stops writes, not `SELECT * FROM read_text('...')`; the suite's first run proved it |
+| `limit` type | strict integer at the protocol layer | the SDK's lax coercion | lax mode turned `"5"` into 5 and `true` into 1 before the server's own check ran |
 
 ## 5. Results
 
-_Pending: the attack suite, latency and tool-selection runs on the real warehouse._
+All numbers below come from files in [`results/`](results/) and can be regenerated with the commands
+in §6. The warehouse is TPC-H scale factor 0.1 generated locally; the mini fixture is synthetic.
+
+### 5.1 Attack suite: the first run failed, and that was the useful part
+
+The pass rule was committed in [`EVAL_PLAN.md`](EVAL_PLAN.md) before the suite existed: 0 bypasses
+(no write, no result over the row cap, no payload the server accepts that the bare service rejects,
+no `expect: reject` payload accepted), 0 errors that repeat caller input, and a stable code on every
+rejection.
+
+| Run | Payloads | Bypasses | Echoes | Coded rejections | Verdict |
+|---|---:|---:|---:|---:|---|
+| First run, mini fixture, both transports ([report](results/attacks/first_run_mini.md)) | 94 | **5** (×2 transports) | 0 | 126/126 | **FAIL** |
+| After the fixes, mini fixture ([report](results/attacks/mini.md)) | 102 | 0 | 0 | 152/152 | PASS |
+| After the fixes, TPC-H sf 0.1 ([report](results/attacks/tpch_sf0.1.md)) | 102 | 0 | 0 | 152/152 | PASS |
+
+What the first run found, and what fixed it:
+
+| Payloads | Found | Where the hole was | Fix |
+|---|---|---|---|
+| `fs-01`..`fs-03` | `SELECT * FROM read_text('C:/Windows/win.ini')`, `read_csv(...)` and `glob('*')` through `run_sql` returned rows: **any file the process could read was readable** | the vendored #15 guards: a table function is one `SELECT`, so the parser check passes it, and a read-only connection only blocks writes | upstream in #15 (`9363ae5`): `enable_external_access = false`, `lock_configuration = true`; re-vendored |
+| `lm-04`, `lm-05` | `limit: "5"` ran as 5 rows, `limit: true` as 1 | the SDK's lax validation coerced them before the server's own check | strict integer type on `limit` |
+
+Two more problems surfaced outside the suite and were fixed before the rerun: the tool-selection eval
+(§5.3) showed that `params: {"limit": 5}` collided with `QueryService.run(limit=...)` and crashed as
+`INTERNAL` (a `use_cache` key would have reached the cache switch the same way), and testing the
+document-search resource showed that the SDK repeats an unknown resource URI in its error. The 8
+payloads added after the first run are marked `[A1]` and listed in the plan's Amendment 1.
+
+On the rerun, MCP and the bare service agree on 160 of 172 comparable results (93.0%). Every one of
+the 12 disagreements is the server being stricter on purpose, each tagged with its reason in the
+suite: string, boolean and fractional limits, arguments outside the tool's schema, and a `params` key
+that names the service's own `use_cache` switch. The echo check excludes words the server itself
+publishes (tool, parameter and query names); without that exclusion it would count 104 hits, and every
+one is a name like `end_date` or `run_sql`.
+
+### 5.2 Latency: what the protocol costs
+
+p50 in ms over 30 timed calls after a warm-up, TPC-H sf 0.1 ([full table](results/latency_sf0.1.md)).
+**Not a quiet machine:** five other projects were being built at the same time, so compare within a
+row, not with other runs.
+
+| Call | Rows returned | Bare service, cached | MCP in-process, cached | MCP over stdio, cached | MCP over stdio, cold |
+|---|---:|---:|---:|---:|---:|
+| `run_query: late_shipments` | 5 | 5.4 | 8.7 | 11.8 | 49.4 |
+| `run_query: revenue_by_dimension` | 25 | 5.3 | 9.2 | 11.8 | 64.8 |
+| `run_query: daily_order_volume` | 365 | 5.1 | 17.4 | 22.0 | 30.6 |
+| `run_query: top_customers` | 1,000 | 6.5 | 57.2 | 56.4 | 165.1 |
+| `list_queries` | – | 0.0 | 1.8 | 5.3 | – |
+
+The overhead is not the protocol hop, it is the rows. On a cache hit, the MCP layer adds about 3 ms to
+a 5-row answer and about 51 ms to a 1,000-row, 6-column one, almost all of it turning a DataFrame into
+JSON twice (structured content plus a text copy). The stdio pipe adds 0-5 ms per call. Starting a
+stdio server (spawn to a ready client) took 7-10 s here, so a client should keep one process alive,
+which is what desktop clients do.
+
+### 5.3 Tool selection with a local model (secondary, not gated)
+
+`qwen2.5:7b-instruct` (Q4, Ollama, temperature 0) got the tool list, the server instructions and the
+catalog, and one of 20 analyst questions frozen before the first call ([results](results/tool_eval_qwen7b.md),
+[tasks](eval/tool_tasks.jsonl)). Correct means the right query and every pinned parameter equal to the
+reference.
+
+**11/20 correct (Wilson 95% interval 0.34 to 0.74).** It never picked the wrong query. Of the 9
+misses:
+
+- **7 are the same mistake: an inclusive end date** (`1995-12-31` for "1995" instead of `1996-01-01`),
+  although the tool description says `end_date` is exclusive and one task says "both days included".
+  **The server accepted all 7 and returned a plausible answer missing the last day.** No guard can
+  catch that: the call is valid.
+- 1 added a filter the query does not have (rejected with `BAD_PARAM`).
+- 1 put `limit` inside `params`, which exposed the crash described in §5.1.
+
+The run replays offline from the recorded responses; [after the fixes](results/tool_eval_qwen7b_replay_after_fix.md)
+the score is the same and the crash is a coded `BAD_PARAM`. With n = 20 the interval is wide, so this
+says nothing about other models, only that a 7B model reads a half-open date window the way people do.
+
+### 5.4 What this does and does not show
+
+- It shows that, for these 102 payloads, the server's verdicts are at least as strict as the bare
+  service's on both transports and on both warehouses, that nothing was written, and that no error
+  repeated caller input. It does not prove that no other payload gets through; the first run found a
+  class of hole (table functions) that the original #15 tests had not tried.
+- The most damaging failure in this project is not an attack. It is a valid call with an off-by-one
+  date that returns a wrong number with no error. §7 says what I would change.
 
 ## 6. How to run
 
-_Pending._
+Prerequisites: [uv](https://docs.astral.sh/uv/) and Python 3.13 (uv installs it). Ollama only for
+the optional tool-selection eval.
+
+```bash
+git clone https://github.com/Prithv122/mcp-server.git
+cd mcp-server
+uv sync
+uv run pytest                      # offline: uses the mini fixture
+uv run mcpquery attack-suite       # the differential suite on the mini fixture, both transports
+```
+
+The real warehouse and the measurements:
+
+```bash
+uv run mcpquery build-db --sf 0.1                                     # TPC-H, ~20 s; fetches DuckDB's tpch extension once
+uv run mcpquery attack-suite --db data/warehouse.duckdb --out results/attacks/tpch_sf0.1.json
+uv run mcpquery latency --db data/warehouse.duckdb --out results/latency_sf0.1.json
+uv run mcpquery tool-eval --db data/warehouse.duckdb --replay         # re-scores the recorded model responses, no model needed
+```
+
+Use it from an MCP client: copy [`.mcp.json.example`](.mcp.json.example), set the repository path,
+and the client starts `mcpquery serve` over stdio. Add `--allow-adhoc` to the arguments to expose
+`run_sql`.
 
 ## 7. What I'd change at 100× scale
 
-_Pending._
+- **Make the date window impossible to misread.** The biggest measured error is a valid call with a
+  wrong answer. Replace `start_date`/`end_date` with a `period` argument (`1995`, `1995-Q3`,
+  `1995-03`) the server expands, or return the resolved window in every result (`"window":
+  "1995-01-01 <= o_orderdate < 1995-12-31"`) so the mistake is visible in the answer.
+- **Stream or page large results.** Serialisation is the cost (51 ms for 1,000 rows here). At 100x
+  the rows, return a page plus a cursor, send rows once instead of twice, and for analytics clients
+  offer Arrow instead of JSON.
+- **Move layer 4 to the database.** A read-only DuckDB file on one machine becomes a warehouse role
+  with `SELECT` grants on named views only, no file or network functions, and a statement timeout.
+  The protocol layer keeps its checks; the database stops trusting them.
+- **One server per user, not per process.** stdio means one server process per client. Shared use
+  needs the Streamable HTTP transport, authentication, per-user row limits and an audit log of every
+  tool call, which is where the error-code contract pays off.
+- **Run the attack suite against every engine upgrade.** Layer 3 depends on DuckDB's parser and its
+  statement types; a new DuckDB version could add a statement or table function the suite has not
+  seen. The suite is cheap (about 25 s), so it belongs in CI on every dependency bump.
 
 ---
 

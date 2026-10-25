@@ -10,7 +10,7 @@ before an interview.
 The wrapper is thin on purpose; the work is proving it did not weaken anything. The service it
 exposes (#15) already had four guard layers for a human caller. A model is a different caller: it
 sends JSON, it reads error text as instructions, and anything in its context can be injected. So I
-built a differential attack suite: the same 102 payloads go to the MCP server and to the bare
+built a differential attack suite: the same 111 payloads go to the MCP server and to the bare
 service, and the pass rule, written before the suite, is zero writes, zero over-cap results, nothing
 the server accepts that the service rejects, and no error that repeats caller input. The first run
 failed, and that failure is the most useful thing in the repo.
@@ -58,11 +58,21 @@ and a statement timeout, and switch to the HTTP transport with authentication an
 more than one user shares a server. And the attack suite runs on every DuckDB upgrade, because layer
 3 depends on the parser's statement types.
 
+**Follow-up I should expect: "How do you stop a runaway query?"** An independent review showed the
+row cap bounds rows, not time: `count(*)` over a 10^11-row range ran for minutes and blocked every
+other call. I added a time limit that calls DuckDB's `interrupt()` from a timer, and the next suite
+run failed anyway: building one 200-million-element list never checks for the interrupt, so the call
+outlived the client's timeout. The fix separates two guarantees. The caller always gets an answer at
+the limit, because the query runs on a worker thread: if it is still alive one second later, its
+connection is abandoned and a fresh one serves the next call. The work itself is not bounded, so at
+most two abandoned queries may run before new calls are refused. Bounding the work needs a separate,
+killable process or limits in the database.
+
 ---
 
 **Pitch (30 seconds):** I exposed a guarded SQL service to AI assistants over the Model Context
 Protocol and pre-registered a differential attack suite to prove the guards survived. Its first run
 found that a single `SELECT` could read any local file through a table function, a hole in the
-original service, which I fixed upstream. After the fixes, 102 payloads pass with zero bypasses on
+original service, which I fixed upstream. After the fixes, 111 payloads pass with zero bypasses on
 both transports. A local 7B model picked the right query every time, but in 7 of 20 tasks it wrote
 an inclusive end date and got a silently wrong answer, which is the next thing to design out.

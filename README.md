@@ -72,6 +72,7 @@ Every rejection is `is_error: true` with a JSON body `{"code", "message"}`, `cod
 | Success criterion | pre-registered in [`EVAL_PLAN.md`](EVAL_PLAN.md) before the suite was written | judging the suite after seeing it | the payloads cannot be chosen to fit the result |
 | File access | connection opened with external access disabled and its configuration locked (fixed upstream in #15) | trusting "read-only" | read-only stops writes, not `SELECT * FROM read_text('...')`; the suite's first run proved it |
 | `limit` type | strict integer at the protocol layer | the SDK's lax coercion | lax mode turned `"5"` into 5 and `true` into 1 before the server's own check ran |
+| Runaway queries | interrupt at the limit, then abandon and replace the connection; at most two abandoned | waiting for the interrupt | some DuckDB work never checks for an interrupt; a caller must get an answer anyway |
 
 ## 5. Results
 
@@ -82,14 +83,21 @@ in §6. The warehouse is TPC-H scale factor 0.1 generated locally; the mini fixt
 
 The pass rule was committed in [`EVAL_PLAN.md`](EVAL_PLAN.md) before the suite existed: 0 bypasses
 (no write, no result over the row cap, no payload the server accepts that the bare service rejects,
-no `expect: reject` payload accepted), 0 errors that repeat caller input, and a stable code on every
-rejection.
+no `expect: reject` payload accepted, and, added in Amendment 2, no result over the 4 MB size
+budget), 0 errors that repeat caller input, and a stable code on every **tool-call** rejection.
 
-| Run | Payloads | Bypasses | Echoes | Coded rejections | Verdict |
+| Run | Payloads | Bypasses | Echoes | Coded tool rejections | Verdict |
 |---|---:|---:|---:|---:|---|
-| First run, mini fixture, both transports ([report](results/attacks/first_run_mini.md)) | 94 | **5** (×2 transports) | 0 | 126/126 | **FAIL** |
-| After the fixes, mini fixture ([report](results/attacks/mini.md)) | 102 | 0 | 0 | 152/152 | PASS |
-| After the fixes, TPC-H sf 0.1 ([report](results/attacks/tpch_sf0.1.md)) | 102 | 0 | 0 | 152/152 | PASS |
+| First run, mini fixture ([reproduction](results/attacks/first_run_mini.md)) | 94 | **5** (×2 transports) | 0 | 126/126 | **FAIL** |
+| Amendment 2 first run, both warehouses | 111 | 0 | 0 | 164/164 | **FAIL**: a runaway query outlived the client timeout |
+| Amendment 2 second run, TPC-H | 111 | 0 | 0 | – | **FAIL**: the benign size control timed out on a loaded machine |
+| **Final, mini fixture** ([report](results/attacks/mini.md)) | 111 | **0** | **0** | **165/165** | **PASS** |
+| **Final, TPC-H sf 0.1** ([report](results/attacks/tpch_sf0.1.md)) | 111 | **0** | **0** | **165/165** | **PASS** |
+
+Every run uses both transports (in-process and a stdio subprocess). The final runs are at
+`df38f15`; the middle two rows are recorded in [`EVAL_PLAN.md`](EVAL_PLAN.md) Amendment 2, because
+their report files were overwritten by the reruns. The first-run report is a reproduction on a clean
+clone with the pre-fix server files; the original in-session output was not saved.
 
 What the first run found, and what fixed it:
 
@@ -104,18 +112,33 @@ Two more problems surfaced outside the suite and were fixed before the rerun: th
 document-search resource showed that the SDK repeats an unknown resource URI in its error. The 8
 payloads added after the first run are marked `[A1]` and listed in the plan's Amendment 1.
 
-On the rerun, MCP and the bare service agree on 160 of 172 comparable results (93.0%). Every one of
-the 12 disagreements is the server being stricter on purpose, each tagged with its reason in the
-suite: string, boolean and fractional limits, arguments outside the tool's schema, and a `params` key
-that names the service's own `use_cache` switch. The echo check excludes words the server itself
-publishes (tool, parameter and query names); without that exclusion it would count 104 hits, and every
-one is a name like `end_date` or `run_sql`.
+An independent review from a clean context then tried about 110 payloads by hand. It found no write,
+file read or row-cap bypass, and every number above matched `results/`, but it found what the suite
+had not tried, now covered by 9 `[A2]` payloads:
+
+| Found by the review | Fix |
+|---|---|
+| no time limit: `SELECT count(*) FROM range(10^11)` held the connection, and every other call waited | a per-query limit (10 s by default, 2 s in the suite) that interrupts DuckDB |
+| the interrupt is not always honoured: building one 200M-element LIST noticed it after 148 s (this failed the next run) | a query still running 1 s past the limit is abandoned: the caller gets the timeout error, a fresh connection serves the next call, and with two abandoned queries running new calls are refused |
+| the row cap does not bound bytes: 100,000 rows of 2 KB came back as 202 MB | rows are rendered within a 4 MB budget, `truncated_by: "size"` |
+| LIST values lost elements through numpy's `str()`; BLOBs printed as `bytearray(...)` | rendered as JSON arrays and hex |
+| the runner counted client exceptions as rejections and could not fail an `ok` without row data | both now fail the run; the echo check also tests SQL fragments and prompt names |
+
+In the final runs, MCP and the bare service agree on 175 of 189 comparable results (92.6%). All 14
+disagreements (7 payloads × 2 transports) are the server being stricter on purpose, each tagged with
+its reason in the suite: string, boolean and fractional limits (`lm-04`..`lm-06`), arguments outside
+the tool's schema (`ua-01`, `ua-03`), a `params` key naming the service's own `use_cache` switch
+(`ps-02`), and an empty date window (`ex-08`). The echo check excludes words the server itself
+publishes (tool, parameter and query names); without that exclusion it counts 106 hits, all names
+like `end_date` or `run_sql`. One payload, a lone UTF-16 surrogate (`ex-07`), cannot be sent over
+stdio at all (the client's JSON encoder refuses it), so it is judged in-process only.
 
 ### 5.2 Latency: what the protocol costs
 
 p50 in ms over 30 timed calls after a warm-up, TPC-H sf 0.1 ([full table](results/latency_sf0.1.md)).
 **Not a quiet machine:** five other projects were being built at the same time, so compare within a
-row, not with other runs.
+row, not with other runs. Measured at `25bca0f`, before the per-query time limit existed; the worker
+thread and timer it adds to every uncached query are not in these numbers.
 
 | Call | Rows returned | Bare service, cached | MCP in-process, cached | MCP over stdio, cached | MCP over stdio, cold |
 |---|---:|---:|---:|---:|---:|
@@ -154,10 +177,23 @@ says nothing about other models, only that a 7B model reads a half-open date win
 
 ### 5.4 What this does and does not show
 
-- It shows that, for these 102 payloads, the server's verdicts are at least as strict as the bare
+- It shows that, for these 111 payloads, the server's verdicts are at least as strict as the bare
   service's on both transports and on both warehouses, that nothing was written, and that no error
-  repeated caller input. It does not prove that no other payload gets through; the first run found a
-  class of hole (table functions) that the original #15 tests had not tried.
+  repeated caller input. It does not prove that no other payload gets through: the first run found a
+  class of hole (table functions) that the original #15 tests had not tried, and the review found
+  another (resource exhaustion) that the suite had not tried.
+- **Known limits, not fixed here:**
+  - The time limit bounds how long the *caller* waits, not the work. An abandoned query keeps using
+    CPU and memory until it ends, and the limit covers the query, not turning its rows into JSON.
+    A hard bound needs the query in a separate process or limits in the database itself.
+  - DECIMAL and HUGEINT values arrive as float64 (the vendored service converts results through
+    pandas): exact to about 15 significant digits. TPC-H's largest sum here has 14.
+  - With `--allow-adhoc`, `SELECT * FROM duckdb_databases()` shows the warehouse file's absolute
+    path. Metadata functions are not blocked.
+  - Prompt calls the SDK rejects before the prompt function runs (missing or mistyped arguments)
+    come back as an uncoded `Internal server error`: 4 of the suite's 12 prompt rejections.
+  - `SELECT 1; -- comment` is rejected (`QUERY_FAILED`): the upstream limit wrapper strips only a
+    final semicolon. It fails closed.
 - The most damaging failure in this project is not an attack. It is a valid call with an off-by-one
   date that returns a wrong number with no error. §7 says what I would change.
 
@@ -202,9 +238,13 @@ and the client starts `mcpquery serve` over stdio. Add `--allow-adhoc` to the ar
 - **One server per user, not per process.** stdio means one server process per client. Shared use
   needs the Streamable HTTP transport, authentication, per-user row limits and an audit log of every
   tool call, which is where the error-code contract pays off.
+- **Bound the work, not just the wait.** Run each ad-hoc query in a worker process with a memory cap
+  that can be killed, or push the limits into the database (statement timeout, memory limit per
+  role). The thread-and-abandon design here keeps the caller responsive but cannot reclaim an
+  abandoned query's CPU and memory.
 - **Run the attack suite against every engine upgrade.** Layer 3 depends on DuckDB's parser and its
   statement types; a new DuckDB version could add a statement or table function the suite has not
-  seen. The suite is cheap (about 25 s), so it belongs in CI on every dependency bump.
+  seen. The suite runs in CI on every push, so a dependency bump runs it too.
 
 ---
 

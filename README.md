@@ -185,7 +185,9 @@ says nothing about other models, only that a 7B model reads a half-open date win
 - **Known limits, not fixed here:**
   - The time limit bounds how long the *caller* waits, not the work. An abandoned query keeps using
     CPU and memory until it ends, and the limit covers the query, not turning its rows into JSON.
-    A hard bound needs the query in a separate process or limits in the database itself.
+    A hard bound needs the query in a separate process or limits in the database itself. This bit
+    in hosted CI: `ex-04`'s abandoned copies exhausted a 16 GB runner, so CI runs the suite with
+    `--exclude ex-04` (listed in its report) and the full suite runs locally.
   - DECIMAL and HUGEINT values arrive as float64 (the vendored service converts results through
     pandas): exact to about 15 significant digits. TPC-H's largest sum here has 14.
   - With `--allow-adhoc`, `SELECT * FROM duckdb_databases()` shows the warehouse file's absolute
@@ -207,7 +209,7 @@ git clone https://github.com/Prithv122/mcp-server.git
 cd mcp-server
 uv sync
 uv run pytest                      # offline: uses the mini fixture
-uv run mcpquery attack-suite       # the differential suite on the mini fixture, both transports
+uv run mcpquery attack-suite       # the differential suite on the mini fixture, both transports (~16 GB+ RAM for ex-04)
 ```
 
 The real warehouse and the measurements:

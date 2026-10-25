@@ -169,3 +169,11 @@ was reduced to 10,000 rows of 1 KB (about 10 MB, still 2.5 times the budget); it
 other payload, the pass rule and the server are unchanged for the final run. The 1-in-153 test failure
 in the same run was a race in a new test (a fake stuck query that could finish before the busy
 check); the fake now blocks on an event.
+
+**Hosted CI (2026-10-25, first push, `3b18bcd`):** lint and all 153 tests passed; the attack-suite step
+was cancelled by the runner 7 s after `ex-04` was abandoned. That payload builds one multi-gigabyte
+LIST value, and the suite can have three copies running at once (the direct side, the abandoned
+in-process query and the abandoned query in the stdio server), which most likely exhausted the
+runner's 16 GB. It is the documented limit (the time limit bounds the caller's wait, not the work)
+showing up for real. CI now runs the suite with `--exclude ex-04`, and the report lists the
+exclusion; the full 111-payload runs behind the README are local (64 GB). The pass rule is unchanged.

@@ -45,6 +45,7 @@ from typing import Any
 import duckdb
 
 from ._vendor.queryservice import QueryService
+from ._vendor.queryservice import warehouse as _warehouse
 from .clients import Transport, open_client
 from .minitpch import TABLES
 
@@ -295,7 +296,7 @@ def _git_sha() -> str | None:
 
 
 def _row_counts(database: Path) -> dict[str, int]:
-    con = duckdb.connect(str(database), read_only=True)
+    con = _warehouse.connect(Path(database))  # same settings as the server's connection
     try:
         # Table names come from a fixed tuple, never from input.
         return {t: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in TABLES}

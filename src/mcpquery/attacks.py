@@ -45,11 +45,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-import duckdb
 from mcp.shared.exceptions import MCPError
 
 from ._vendor.queryservice import QueryService
 from ._vendor.queryservice import safety as _safety
+from ._vendor.queryservice import warehouse as _warehouse
 from .clients import Transport, open_client
 from .render import MAX_RESULT_BYTES
 
@@ -484,7 +484,10 @@ def fingerprint(database: Path | str) -> dict[str, Any]:
     with open(path, "rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
-    connection = duckdb.connect(str(path), read_only=True)
+    # Same configuration as the server's connections: DuckDB refuses a second in-process
+    # connection to one file with different settings, and an abandoned query may still
+    # hold the server's connection open when this runs.
+    connection = _warehouse.connect(path)
     try:
         tables = [
             row[0]

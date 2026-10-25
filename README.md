@@ -138,7 +138,7 @@ stdio at all (the client's JSON encoder refuses it), so it is judged in-process 
 p50 in ms over 30 timed calls after a warm-up, TPC-H sf 0.1 ([full table](results/latency_sf0.1.md)).
 **Not a quiet machine:** five other projects were being built at the same time, so compare within a
 row, not with other runs. Measured at `25bca0f`, before the per-query time limit existed; the worker
-thread and timer it adds to every uncached query are not in these numbers.
+thread and timer it adds to every query, cached or not, are not in these numbers.
 
 | Call | Rows returned | Bare service, cached | MCP in-process, cached | MCP over stdio, cached | MCP over stdio, cold |
 |---|---:|---:|---:|---:|---:|

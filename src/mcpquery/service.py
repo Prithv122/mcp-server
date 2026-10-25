@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -32,6 +32,16 @@ RESERVED_KWARGS = frozenset({"name", "limit", "use_cache"})
 #: ``SELECT count(*) FROM range(10^11)`` returns one row after minutes, and holds the lock
 #: (so every other call waits) the whole time.
 DEFAULT_TIMEOUT_S = 10.0
+
+#: How long past the limit to wait for an interrupted query before giving up on it. Some
+#: work never checks for an interrupt (building one 200-million-element LIST value took
+#: 148 s to notice), so the caller gets its answer at the limit and the connection is
+#: replaced instead of waited on.
+ABANDON_GRACE_S = 1.0
+
+#: Abandoned queries still burning CPU and memory in the background. Past this many, new
+#: queries are refused until they finish, so a client cannot stack them up.
+MAX_ABANDONED = 2
 
 
 def describe(query: Query) -> dict[str, Any]:
@@ -78,14 +88,17 @@ class Gateway:
         use_cache: bool = True,
         timeout_s: float = DEFAULT_TIMEOUT_S,
     ) -> None:
+        self._service_args = (database, {"cache_dir": cache_dir, "use_cache": use_cache})
         self.service = QueryService(database, cache_dir=cache_dir, use_cache=use_cache)
         self.timeout_s = timeout_s
+        self._abandoned: list[tuple[threading.Thread, QueryService]] = []
         # A DuckDB connection is not safe for concurrent use, and the SDK runs sync tools
         # on worker threads. One lock keeps two tool calls from sharing it mid-query.
         self._lock = threading.Lock()
 
     def close(self) -> None:
         self.service.close()
+        self._reap()
 
     def __enter__(self) -> Gateway:
         return self
@@ -131,18 +144,20 @@ class Gateway:
         for value in (params or {}).values():
             if isinstance(value, str):
                 _require_unicode(value)
-        with self._classify(query=query):
+        capped = _limit(limit)
+
+        def call(service: QueryService) -> Any:
             _check_window(query, params or {})
-            result = self.service.run(query.name, limit=_limit(limit), **(params or {}))
-        return _payload(result)
+            return service.run(query.name, limit=capped, **(params or {}))
+
+        return _payload(self._execute(call, query=query))
 
     def run_sql(self, sql: Any, limit: Any = None) -> dict[str, Any]:
         if not isinstance(sql, str):
             raise errors.bad_param("sql must be a string.")
         _require_unicode(sql)
-        with self._classify(query=None):
-            result = self.service.run_sql(sql, limit=_limit(limit))
-        return _payload(result)
+        capped = _limit(limit)
+        return _payload(self._execute(lambda service: service.run_sql(sql, limit=capped)))
 
     def schema(self) -> list[dict[str, Any]]:
         """Tables and columns, read from ``information_schema`` on the read-only connection."""
@@ -157,15 +172,59 @@ class Gateway:
             tables.setdefault(table, []).append({"name": column, "type": kind})
         return [{"table": table, "columns": columns} for table, columns in tables.items()]
 
+    def _execute(self, call: Callable[[QueryService], Any], *, query: Query | None = None) -> Any:
+        """Run ``call`` on a worker thread and answer within the time limit, always.
+
+        The interrupt stops most runaway queries at the limit. For one that ignores it, the
+        caller still gets the timeout error at ``timeout_s + ABANDON_GRACE_S``; the busy
+        connection is left to finish on its own thread and a fresh one serves the next call.
+        """
+        with self._classify(query=query), self._lock:
+            self._reap()
+            if len(self._abandoned) >= MAX_ABANDONED:
+                raise errors.busy()
+            service = self.service
+            box: dict[str, Any] = {}
+
+            def target() -> None:
+                try:
+                    box["result"] = call(service)
+                except BaseException as exc:  # handed back to the caller's thread below
+                    box["error"] = exc
+
+            worker = threading.Thread(target=target, name="mcpquery-query", daemon=True)
+            with self._deadline(service):
+                worker.start()
+                worker.join(self.timeout_s + ABANDON_GRACE_S)
+            if worker.is_alive():
+                log.warning("query ignored its interrupt; abandoning its connection")
+                self._abandoned.append((worker, service))
+                database, kwargs = self._service_args
+                self.service = QueryService(database, **kwargs)
+                raise errors.timed_out(self.timeout_s)
+            if "error" in box:
+                raise box["error"]
+            return box["result"]
+
+    def _reap(self) -> None:
+        """Close the connections of abandoned queries that have finished since."""
+        alive = []
+        for worker, service in self._abandoned:
+            if worker.is_alive():
+                alive.append((worker, service))
+            else:
+                service.close()
+        self._abandoned = alive
+
     @contextmanager
-    def _deadline(self) -> Iterator[None]:
+    def _deadline(self, service: QueryService) -> Iterator[None]:
         """Interrupt the connection if the block outlives ``timeout_s``.
 
         DuckDB has no statement timeout setting, but ``interrupt()`` is safe to call from
         another thread and makes the running query raise ``InterruptException``. ``done``
         keeps a timer that fires just after the query finished from interrupting nothing.
         """
-        connection = self.service.connection
+        connection = service.connection
         done = threading.Event()
 
         def fire() -> None:
@@ -185,8 +244,7 @@ class Gateway:
     def _classify(self, *, query: Query | None) -> Iterator[None]:
         """Turn whatever the service raises into a :class:`QueryError` without caller text."""
         try:
-            with self._lock, self._deadline():
-                yield
+            yield
         except QueryError:
             raise
         except duckdb.InterruptException as exc:

@@ -259,3 +259,27 @@ async def test_result_reports_size_truncation(gateway, monkeypatch):
     assert body["truncated"] is True
     assert body["truncated_by"] == "size"
     assert body["row_count"] < 100
+
+
+def test_a_query_that_ignores_its_interrupt_is_abandoned_not_waited_on(mini_db, tmp_path):
+    import time
+
+    from mcpquery import service as service_module
+    from mcpquery.errors import QueryError
+    from mcpquery.service import Gateway
+
+    with Gateway(mini_db, cache_dir=tmp_path / "c", timeout_s=0.2) as gw:
+        first_connection = gw.service
+        started = time.perf_counter()
+        with pytest.raises(QueryError) as caught:
+            gw._execute(lambda _service: time.sleep(3))  # sleep never checks an interrupt
+        assert time.perf_counter() - started < 0.2 + service_module.ABANDON_GRACE_S + 0.5
+        assert "time limit" in caught.value.message
+        assert gw.service is not first_connection
+        assert gw.run_sql("SELECT 1 AS one")["rows"] == [[1]]
+
+        with pytest.raises(QueryError):
+            gw._execute(lambda _service: time.sleep(3))
+        with pytest.raises(QueryError) as busy:
+            gw.run_sql("SELECT 1 AS one")
+        assert "still stopping" in busy.value.message

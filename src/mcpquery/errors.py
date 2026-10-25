@@ -75,7 +75,15 @@ def timed_out(seconds: float) -> QueryError:
     # QUERY_FAILED rather than a new code: the code set is part of the pre-registered contract.
     return QueryError(
         ErrorCode.QUERY_FAILED,
-        f"The query exceeded the {seconds:g} s time limit and was stopped.",
+        f"The query exceeded the {seconds:g} s time limit; no result was returned.",
+    )
+
+
+def busy() -> QueryError:
+    return QueryError(
+        ErrorCode.QUERY_FAILED,
+        "The server is still stopping earlier queries that ran past the time limit. "
+        "Try again shortly.",
     )
 
 

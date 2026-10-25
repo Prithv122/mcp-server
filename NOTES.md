@@ -143,3 +143,10 @@ file read and no row-cap bypass, and every README number matched `results/`. Wha
   JSON encoder refuses it); `SELECT 1; -- comment` fails closed because the upstream limit wrapper
   only strips a final semicolon; `duckdb_databases()` shows the warehouse's absolute path, which
   includes the Windows user name (documented, not blocked).
+- **The first rerun after the abandon fix crashed the runner, not the server.** DuckDB refuses a
+  second in-process connection to the same file with different settings. The abandoned query still
+  held the server's connection (external access off), and the runner's write check then opened the
+  file with plain `read_only=True`: `ConnectionException`, exit 1, empty reports. Because stderr went
+  to `/dev/null` and the old `.json` files stayed on disk, the stale reports first looked like a
+  repeat of the earlier failure. The runner and the latency harness now open the warehouse through
+  the same `warehouse.connect`. Lesson: check report timestamps, and never discard stderr on a gated run.

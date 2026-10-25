@@ -109,3 +109,37 @@ were built in parallel against the core server, each in its own files, and revie
   are required from clients. Left as is.
 - A CLI subprocess test of the whole suite took 265 s on the busy machine and duplicated the CI step
   that runs the same command; removed.
+
+## 2026-10-25 — independent review and amendment 2
+
+A review from a clean context (given the code and the claims, not the reasoning) found no write, no
+file read and no row-cap bypass, and every README number matched `results/`. What it did find:
+
+- **No time limit.** `SELECT count(*) FROM range(10^11)` ran past 40 s holding the connection lock,
+  so every other call queued behind it. Added a per-query limit (default 10 s): a `threading.Timer`
+  calls `connection.interrupt()`, which DuckDB honours from another thread.
+- **The interrupt is not always honoured.** `SELECT list(range(200000000))` noticed it only after
+  148 s: building a single LIST value does not check. The A2 first run failed on exactly this payload
+  (a client timeout). Now the query runs on a worker thread; if it is still alive at the limit plus
+  1 s, the caller gets the timeout error, the connection is abandoned to finish on its own, and a
+  fresh one takes the next call. Two abandoned queries still running → new calls are refused, so a
+  client cannot stack them. The abandoned work still uses CPU and memory until it ends; a hard bound
+  needs a separate process or a database-side limit. A DuckDB `memory_limit` did not help: the list
+  build passed 12 GB with `memory_limit = 1GB` before I stopped it.
+- **The row cap does not bound bytes.** 100,000 rows of 2 KB strings came back as 202 MB. Rows are
+  now rendered within a 4 MB budget, marked `truncated_by: "size"`.
+- **Rendering bugs.** LIST values went through numpy's `str()`, which elides the middle of long
+  arrays; BLOBs printed as `bytearray(...)`. Fixed. My docstring claimed decimals stay exact; they do
+  not, because #15 converts results to pandas and DECIMAL arrives as float64. Documented; TPC-H's
+  largest sum here has 14 significant digits, inside float64's range.
+- **Overclaim.** "A code on every rejection" was true for tool calls only. Prompt calls the SDK
+  rejects before my code runs come back as an uncoded `Internal server error`; now counted
+  separately (4 of 12 prompt rejections).
+- **Runner blind spots.** Client exceptions counted as rejections; an `ok` without row data could
+  not fail the over-cap check; echo matching was whole-string only. All fixed, with tests that show
+  each detector firing.
+- **Smaller:** an empty date window returned an empty result (now `BAD_PARAM`); a lone UTF-16
+  surrogate crashed as `INTERNAL` (now `BAD_PARAM`; it cannot even be sent over stdio, the client's
+  JSON encoder refuses it); `SELECT 1; -- comment` fails closed because the upstream limit wrapper
+  only strips a final semicolon; `duckdb_databases()` shows the warehouse's absolute path, which
+  includes the Windows user name (documented, not blocked).

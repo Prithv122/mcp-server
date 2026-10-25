@@ -148,3 +148,14 @@ recursive CTE, a 200M-element list, a 200 MB result that must come back truncate
 metadata read that discloses the server's file path (`expect: ok`, a documented limitation), a lone
 surrogate, an empty date window, and a trailing-comment query that fails closed. The suite runs with
 a 2 s time limit. The pass rule is unchanged, with `over_size` added as a bypass.
+
+**Amendment 2, first run of the 111-payload suite (2026-10-25, runner `957d195`, server `d83ad81`):
+FAIL on both warehouses**, for one payload. 0 bypasses, 0 echoes, 164/164 tool rejections coded,
+but `ex-04` (`SELECT list(range(200000000))`) produced a client error: DuckDB does not check for an
+interrupt while it builds that single LIST value, so the 2 s limit fired and the call still ran past
+the client's 120 s timeout (stdio on TPC-H, in-process on the mini fixture; the other transport came
+back as a slow rejection). The time limit bounded most queries but not the response time of this one.
+Fix (`41dcb0a`): a query still running at the limit plus 1 s is abandoned: the caller gets the
+timeout error, the busy connection is left to finish on its own thread, and a fresh connection serves
+the next call; with two abandoned queries still running, new calls are refused until they finish.
+The pass rule and payloads are unchanged for the rerun.

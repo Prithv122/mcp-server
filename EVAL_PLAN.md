@@ -159,3 +159,13 @@ Fix (`41dcb0a`): a query still running at the limit plus 1 s is abandoned: the c
 timeout error, the busy connection is left to finish on its own thread, and a fresh connection serves
 the next call; with two abandoned queries still running, new calls are refused until they finish.
 The pass rule and payloads are unchanged for the rerun.
+
+**Amendment 2, second rerun (runner `0cc3516`, server `41dcb0a`):** PASS on the mini fixture; FAIL on
+TPC-H for one payload, `ex-05`, the benign size control (`repeat('x', 2000)` over 100,000 rows,
+about 200 MB, `expect: ok`). Over stdio, with the machine's CPU at 100% from other work, building
+200 MB took longer than the suite's 2 s limit, so the server correctly stopped it, and a benign
+control was rejected. The payload was meant to test the 4 MB size budget, not the time limit, so it
+was reduced to 10,000 rows of 1 KB (about 10 MB, still 2.5 times the budget); its note says so. No
+other payload, the pass rule and the server are unchanged for the final run. The 1-in-153 test failure
+in the same run was a race in a new test (a fake stuck query that could finish before the busy
+check); the fake now blocks on an event.

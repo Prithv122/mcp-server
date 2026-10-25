@@ -150,3 +150,22 @@ file read and no row-cap bypass, and every README number matched `results/`. Wha
   to `/dev/null` and the old `.json` files stayed on disk, the stale reports first looked like a
   repeat of the earlier failure. The runner and the latency harness now open the warehouse through
   the same `warehouse.connect`. Lesson: check report timestamps, and never discard stderr on a gated run.
+
+## 2026-10-25 — local CI record (hosted CI not run: no GitHub repo yet)
+
+Fresh clone of `cb00821` into a scratch directory, fresh install (`UV_NO_CACHE=1`), the workflow's
+steps in order:
+
+| Step | Command | Result |
+|---|---|---|
+| install | `uv sync --all-groups` | ok |
+| lint | `uv run ruff check .` · `uv run ruff format --check .` | clean (35 files) |
+| test | `uv run pytest --cov=src` | **153 passed**, coverage 93% |
+| attack suite | `uv run mcpquery attack-suite` (mini fixture, both transports) | **PASS** |
+| README path | plain `uv sync`, then a pytest subset | ok |
+
+Differences from the hosted runner: Windows 11 instead of Ubuntu; `--basetemp` in a scratch
+directory and `-p no:cacheprovider -o addopts=""` (the sandbox blocks `%TEMP%`); the machine was at
+100% CPU from other work. The measurement runs behind the README (`results/`) were made at
+`df38f15` (attack suite) and `25bca0f` (latency); the tool-selection run on the server at `10a6065`,
+replayed offline after the fixes.

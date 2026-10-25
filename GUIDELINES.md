@@ -25,7 +25,7 @@ pandas · uv · ruff · pytest (+ pytest-asyncio). Ollama only for the local too
       mini fixture and on TPC-H sf 0.1, over in-process and stdio transports
 - [x] Latency per tool, cold vs cached, protocol overhead against the bare service (informative)
 - [x] Tool-selection eval with a local model, k/20 with a Wilson interval (informative)
-- [ ] Runs from a clean clone using only the documented steps
+- [x] Runs from a clean clone using only the documented steps
 - [ ] Tests, lint and CI green; README results come from real runs
 
 ## Conventions

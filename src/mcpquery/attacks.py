@@ -748,7 +748,7 @@ async def run_suite(
         after = fingerprint(database)
         changes = diff_fingerprints(before, after)
         return Report(
-            database=str(database),
+            database=Path(database).name,  # a file name only: full paths carry the user name
             transports=list(transports),
             rows=rows,
             totals=summarise(rows, changes),

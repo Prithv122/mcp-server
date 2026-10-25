@@ -1,5 +1,5 @@
 {
-  "database": "C:\\Users\\fever\\AppData\\Local\\Temp\\tmp59kf3jqi\\mini.duckdb",
+  "database": "mini.duckdb",
   "transports": [
     "memory",
     "stdio"

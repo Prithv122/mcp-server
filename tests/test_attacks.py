@@ -557,3 +557,24 @@ def test_stdio_subset_matches_the_in_process_verdicts(mini_db, tmp_path, memory_
     wanted = [i for i in STDIO_SUBSET if i != "ex-07"]
     memory = {r.id: (r.mcp, r.code) for r in memory_report.rows}
     assert {r.id: (r.mcp, r.code) for r in report.rows} == {i: memory[i] for i in wanted}
+
+
+def test_exclude_leaves_payloads_out_and_says_so(tmp_path, mini_db, capsys):
+    lines = [
+        {"id": "ok-1", "kind": "benign", "expect": "ok", "tool": "list_queries"},
+        {"id": "ok-2", "kind": "benign", "expect": "ok", "tool": "list_queries"},
+    ]
+    suite = tmp_path / "small.jsonl"
+    suite.write_text("\n".join(json.dumps(x) for x in lines), encoding="utf-8")
+    out = tmp_path / "report.json"
+    args = argparse.Namespace(
+        db=mini_db, suite=suite, json=True, out=out, transports=["memory"], exclude=["ok-2"]
+    )
+    assert attacks.main(args) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["totals"]["payloads"] == 1
+    assert "ok-2/excluded" in report["skipped"]
+
+    args.exclude = ["no-such-id"]
+    with pytest.raises(SystemExit):
+        attacks.main(args)

@@ -88,6 +88,9 @@ def parser() -> argparse.ArgumentParser:
     attack.add_argument("--suite", type=Path, default=None, help="attacks.jsonl to run")
     attack.add_argument("--json", action="store_true", help="Print the report as JSON")
     attack.add_argument("--out", type=Path, default=None, help="Also write the report here")
+    attack.add_argument(
+        "--exclude", nargs="*", default=[], metavar="ID", help="Payload ids to leave out"
+    )
     attack.set_defaults(func=_attack_suite)
 
     latency = sub.add_parser("latency", help="Measure per-tool latency, cold vs cached")

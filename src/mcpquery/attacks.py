@@ -792,7 +792,7 @@ def render_markdown(report: Report) -> str:
         f"- Prompt rejections without a code: {t['prompt_rejections_uncoded']}/"
         f"{t['prompt_rejections']} (not gated: the code rule covers tool calls)",
         f"- Query time limit: {report.timeout_s} s on both sides",
-        f"- Not sent (cannot be encoded on that transport): {report.skipped or 'none'}",
+        f"- Not sent (unencodable on that transport, or --exclude): {report.skipped or 'none'}",
         f"- Warehouse unchanged: {'yes' if not report.write_changes else 'NO'} "
         f"(file sha256 {report.fingerprint_after['file_sha256'][:12]})",
         f"- Verdict: {'PASS' if report.passed else 'FAIL'}",
@@ -854,6 +854,13 @@ def main(args: Any) -> int:
     for noisy in ("mcp", "mcpquery"):
         logging.getLogger(noisy).setLevel(logging.CRITICAL)
     suite = load_suite(args.suite or default_suite_path())
+    # A payload can be left out by id, e.g. one that needs more memory than a CI runner has.
+    # Excluded ids are listed in the report, so a partial run never reads as a full one.
+    excluded = sorted(set(getattr(args, "exclude", None) or ()))
+    unknown = [pid for pid in excluded if pid not in {p.id for p in suite}]
+    if unknown:
+        raise SystemExit(f"--exclude names no payload in the suite: {unknown}")
+    suite = [p for p in suite if p.id not in excluded]
     transports = tuple(getattr(args, "transports", None) or ("memory", "stdio"))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as scratch:
         root = Path(scratch)
@@ -864,6 +871,7 @@ def main(args: Any) -> int:
             database = root / "mini.duckdb"
             build(database)
         report = asyncio.run(run_suite(database, suite, transports, work_dir=root / "work"))
+    report.skipped.extend(f"{pid}/excluded" for pid in excluded)
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
     else:
